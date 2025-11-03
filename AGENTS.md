@@ -8,21 +8,24 @@ Central service for authentication, authorization, and token management across E
 ## 🔧 Tasks for agents
 1. **Add table**
    - Add `auth.tokens_cache` with `token`, `payload`, `modified_at` (see README).
-2. **Implement endpoints**
+2. **Generate all success and fail tests in the currents api_test.rs file.**
+   - Use the current structure, fixing server creation error and updating test cases on the list. dont change test technique.
+/* OMIT FOR NOW
+3.**Implement endpoints**
    - `/auth/login`: create token, insert record.
    - `/auth/logout`: delete token from table.
    - `/auth/profile`: validate token, renew conditionally.
    - `/check-token`: same validation logic for external APIs.
-3. **Add token renewal logic**
+4. **Add token renewal logic**
    - Atomic SQL: `UPDATE ... RETURNING` + fallback `SELECT`.
    - Respect `TOKEN_TTL_SECONDS` and `TOKEN_RENEW_THRESHOLD_SECONDS`.
-4. **Require header `token:` in all protected routes.**
-5. **On user delete**, remove related tokens.
-6. **Add minimal logging**
+5. **Require header `token:` in all protected routes.**
+6. **On user delete**, remove related tokens.
+7. **Add minimal logging**
    - Record token, endpoint, timestamp, IP.
-7. **Add cleanup job**
+8. **Add cleanup job**
    - Periodically remove expired tokens.
-
+*/
 ---
 
 ## 🧭 Flow summary

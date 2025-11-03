@@ -1,11 +1,13 @@
 use auth_api::auth_server;
-use httpageboy::test_utils::{run_test, setup_test_server, SERVER_URL};
-use httpageboy::Server;
+use httpageboy::test_utils::{SERVER_URL, run_test, setup_test_server};
 use std::time::Duration;
 use tokio::time::sleep;
 
 async fn create_test_server() -> Server {
-  auth_server(SERVER_URL, 1).await
+  let _ = dotenvy::dotenv();
+
+  let server = auth_server("127.0.0.1:7878", 10).await;
+  server.run().await;
 }
 
 async fn ensure_test_server() {
@@ -62,7 +64,11 @@ async fn test_delete_user_success() {
     b"\"id\":1",
   )
   .await;
-  execute(b"DELETE /users/1 HTTP/1.1\r\ntoken: VALID_TOKEN\r\n\r\n", b"").await;
+  execute(
+    b"DELETE /users/1 HTTP/1.1\r\ntoken: VALID_TOKEN\r\n\r\n",
+    b"",
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -160,7 +166,11 @@ async fn test_delete_role() {
     b"\"id\":1",
   )
   .await;
-  execute(b"DELETE /roles/1 HTTP/1.1\r\ntoken: VALID_TOKEN\r\n\r\n", b"").await;
+  execute(
+    b"DELETE /roles/1 HTTP/1.1\r\ntoken: VALID_TOKEN\r\n\r\n",
+    b"",
+  )
+  .await;
 }
 
 #[tokio::test]
