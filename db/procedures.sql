@@ -69,7 +69,7 @@ RETURNS TABLE(id INT, name TEXT) AS $$
 BEGIN
     INSERT INTO auth.role (name)
     VALUES (p_name)
-    ON CONFLICT (name) DO NOTHING;
+    ON CONFLICT ON CONSTRAINT role_name_key DO NOTHING;
 
     RETURN QUERY
     SELECT r.id, r.name
@@ -117,7 +117,7 @@ RETURNS TABLE(id INT, name TEXT) AS $$
 BEGIN
     INSERT INTO auth.permission (name)
     VALUES (p_name)
-    ON CONFLICT (name) DO NOTHING;
+    ON CONFLICT ON CONSTRAINT permission_name_key DO NOTHING;
 
     RETURN QUERY
     SELECT p.id, p.name
@@ -157,13 +157,15 @@ BEGIN
     WITH upsert AS (
         INSERT INTO auth.services (name, description)
         VALUES (p_name, p_description)
-        ON CONFLICT (name) DO UPDATE
+        ON CONFLICT ON CONSTRAINT services_name_key DO UPDATE
         SET
             description = EXCLUDED.description,
             updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT
-        RETURNING id, name, description
+        RETURNING auth.services.id AS id,
+                  auth.services.name AS name,
+                  auth.services.description AS description
     )
-    SELECT id, name, description FROM upsert
+    SELECT upsert.id, upsert.name, upsert.description FROM upsert
     UNION ALL
     SELECT s.id, s.name, s.description
     FROM auth.services s
