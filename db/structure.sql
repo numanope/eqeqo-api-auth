@@ -81,7 +81,9 @@ CREATE TABLE auth.person_service_role (
 CREATE TABLE auth.tokens_cache (
   token TEXT PRIMARY KEY,
   payload JSONB NOT NULL,
-  modified_at BIGINT NOT NULL
+  modified_at BIGINT NOT NULL,
+  created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
 );
 
 CREATE INDEX idx_auth_tokens_modified_at ON auth.tokens_cache(modified_at);
@@ -140,5 +142,10 @@ EXECUTE FUNCTION auth.set_epoch_audit_fields();
 
 CREATE TRIGGER trg_auth_person_service_role_audit
 BEFORE INSERT OR UPDATE ON auth.person_service_role
+FOR EACH ROW
+EXECUTE FUNCTION auth.set_epoch_audit_fields();
+
+CREATE TRIGGER trg_auth_tokens_cache_audit
+BEFORE INSERT OR UPDATE ON auth.tokens_cache
 FOR EACH ROW
 EXECUTE FUNCTION auth.set_epoch_audit_fields();

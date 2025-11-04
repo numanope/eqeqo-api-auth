@@ -1,7 +1,7 @@
 use auth_api::auth_server;
 use httpageboy::Server;
-use httpageboy::test_utils::{run_test, setup_test_server, SERVER_URL};
-use serde_json::{json, Value};
+use httpageboy::test_utils::{SERVER_URL, run_test, setup_test_server};
+use serde_json::{Value, json};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -75,10 +75,7 @@ async fn create_user_for_tests(token: &str) -> (i32, String) {
   let response = execute(request.as_bytes(), b"\"id\"").await;
   let json = parse_json(&response).expect("json body");
   let id = json["id"].as_i64().expect("id") as i32;
-  let returned_username = json["username"]
-    .as_str()
-    .unwrap_or_default()
-    .to_string();
+  let returned_username = json["username"].as_str().unwrap_or_default().to_string();
   (id, returned_username)
 }
 
@@ -378,7 +375,11 @@ async fn delete_user_succeeds() {
   let request = request_with_token("DELETE", &path, &token, None);
   let response = execute(request.as_bytes(), b"204").await;
   let status = status_line(&response).unwrap_or_default().to_string();
-  assert!(status.contains("204"), "expected 204 response, got {}", status);
+  assert!(
+    status.contains("204"),
+    "expected 204 response, got {}",
+    status
+  );
 
   let verify = request_with_token("GET", &path, &token, None);
   execute(verify.as_bytes(), b"User not found").await;
@@ -448,7 +449,11 @@ async fn delete_service_succeeds() {
   let request = request_with_token("DELETE", &path, &token, None);
   let response = execute(request.as_bytes(), b"204").await;
   let status = status_line(&response).unwrap_or_default().to_string();
-  assert!(status.contains("204"), "expected 204 response, got {}", status);
+  assert!(
+    status.contains("204"),
+    "expected 204 response, got {}",
+    status
+  );
 }
 
 #[tokio::test]
@@ -460,7 +465,11 @@ async fn delete_service_fails_with_invalid_id() {
 
 #[tokio::test]
 async fn delete_service_requires_token() {
-  execute(b"DELETE /services/1 HTTP/1.1\r\n\r\n", b"Missing token header").await;
+  execute(
+    b"DELETE /services/1 HTTP/1.1\r\n\r\n",
+    b"Missing token header",
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -539,7 +548,11 @@ async fn delete_role_succeeds() {
   let request = request_with_token("DELETE", &path, &token, None);
   let response = execute(request.as_bytes(), b"204").await;
   let status = status_line(&response).unwrap_or_default().to_string();
-  assert!(status.contains("204"), "expected 204 response, got {}", status);
+  assert!(
+    status.contains("204"),
+    "expected 204 response, got {}",
+    status
+  );
 }
 
 #[tokio::test]
@@ -580,8 +593,12 @@ async fn create_permission_succeeds_with_unique_name() {
 #[tokio::test]
 async fn create_permission_fails_with_invalid_body() {
   let token = login_and_get_token().await;
-  let request =
-    request_with_token("POST", "/permissions", &token, Some("{\"title\":\"invalid\"}"));
+  let request = request_with_token(
+    "POST",
+    "/permissions",
+    &token,
+    Some("{\"title\":\"invalid\"}"),
+  );
   execute(request.as_bytes(), b"Invalid request body").await;
 }
 
@@ -613,7 +630,11 @@ async fn delete_permission_succeeds() {
   let request = request_with_token("DELETE", &path, &token, None);
   let response = execute(request.as_bytes(), b"204").await;
   let status = status_line(&response).unwrap_or_default().to_string();
-  assert!(status.contains("204"), "expected 204 response, got {}", status);
+  assert!(
+    status.contains("204"),
+    "expected 204 response, got {}",
+    status
+  );
 }
 
 #[tokio::test]
@@ -625,7 +646,11 @@ async fn delete_permission_fails_with_invalid_id() {
 
 #[tokio::test]
 async fn delete_permission_requires_token() {
-  execute(b"DELETE /permissions/1 HTTP/1.1\r\n\r\n", b"Missing token header").await;
+  execute(
+    b"DELETE /permissions/1 HTTP/1.1\r\n\r\n",
+    b"Missing token header",
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -647,8 +672,12 @@ async fn assign_permission_to_role_succeeds() {
 #[tokio::test]
 async fn assign_permission_to_role_fails_with_invalid_body() {
   let token = login_and_get_token().await;
-  let request =
-    request_with_token("POST", "/role-permissions", &token, Some("{\"role_id\":\"x\"}"));
+  let request = request_with_token(
+    "POST",
+    "/role-permissions",
+    &token,
+    Some("{\"role_id\":\"x\"}"),
+  );
   execute(request.as_bytes(), b"Invalid request body").await;
 }
 
@@ -668,7 +697,11 @@ async fn remove_permission_from_role_succeeds() {
   let remove_request = request_with_token("DELETE", "/role-permissions", &token, Some(&body));
   let response = execute(remove_request.as_bytes(), b"204").await;
   let status = status_line(&response).unwrap_or_default().to_string();
-  assert!(status.contains("204"), "expected 204 response, got {}", status);
+  assert!(
+    status.contains("204"),
+    "expected 204 response, got {}",
+    status
+  );
 }
 
 #[tokio::test]
@@ -699,8 +732,12 @@ async fn assign_role_to_service_succeeds() {
 #[tokio::test]
 async fn assign_role_to_service_fails_with_invalid_body() {
   let token = login_and_get_token().await;
-  let request =
-    request_with_token("POST", "/service-roles", &token, Some("{\"service\":\"x\"}"));
+  let request = request_with_token(
+    "POST",
+    "/service-roles",
+    &token,
+    Some("{\"service\":\"x\"}"),
+  );
   execute(request.as_bytes(), b"Invalid request body").await;
 }
 
@@ -720,7 +757,11 @@ async fn remove_role_from_service_succeeds() {
   let remove_request = request_with_token("DELETE", "/service-roles", &token, Some(&body));
   let response = execute(remove_request.as_bytes(), b"204").await;
   let status = status_line(&response).unwrap_or_default().to_string();
-  assert!(status.contains("204"), "expected 204 response, got {}", status);
+  assert!(
+    status.contains("204"),
+    "expected 204 response, got {}",
+    status
+  );
 }
 
 #[tokio::test]
@@ -751,9 +792,10 @@ async fn list_role_permissions_returns_entries() {
   let json = parse_json(&response).expect("json body");
   let permissions = json.as_array().expect("permissions array");
   assert!(
-    permissions
-      .iter()
-      .any(|permission| permission.get("id").and_then(|value| value.as_i64()) == Some(permission_id as i64)),
+    permissions.iter().any(
+      |permission| permission.get("id").and_then(|value| value.as_i64())
+        == Some(permission_id as i64)
+    ),
     "assigned permission missing from role list"
   );
 }
