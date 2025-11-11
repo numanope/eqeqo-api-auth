@@ -3,13 +3,19 @@
 Centralized authentication and authorization service for the **Eqeqo** ecosystem.
 Handles token issuance, validation, and access control for all other APIs.
 
----
 
 ## ⚙️ Setup
 
+**Local setup**
 ```bash
 psql -U postgres -f db/run_all.sql
+cp .env.example .env
 cargo run
+```
+
+**Tests**
+```bash
+cargo test
 ```
 
 Server default: `http://127.0.0.1:7878`
@@ -22,7 +28,6 @@ TOKEN_TTL_SECONDS=300
 TOKEN_RENEW_THRESHOLD_SECONDS=30
 ```
 
----
 
 ## 🧩 Endpoints
 
@@ -44,71 +49,61 @@ TOKEN_RENEW_THRESHOLD_SECONDS=30
 | **POST** | `/service-roles` | Assign role to service |
 | **POST** | `/person-service-roles` | Assign role to person in a service |
 
----
-
-## 🗃️ Database (add directly to current schema)
-
-```sql
-CREATE TABLE auth.tokens_cache (
-  token TEXT PRIMARY KEY,
-  payload JSONB NOT NULL,
-  modified_at NUMERIC NOT NULL
-);
-CREATE INDEX idx_auth_tokens_modified_at ON auth.tokens_cache(modified_at);
-```
-
----
 
 ## 🔁 Token logic
-- Generated at login (`hash(secret + random + timestamp)`).
+- Generated at login (`hash(secret + random + timestamp)`). NO JWT nor similar.
 - Stored in `auth.tokens_cache` with `payload` and `modified_at`.
-- Renewed automatically if not expired (`TTL=5min`, threshold=30s).
+- Renewed automatically if not expired.
 - Removed on logout or user deletion.
-
----
-
-## 🔐 Token header
-All requests must include:
+All requests must include token in *header*
 
 ```
 token: <token>
 ```
-
-No tokens in URLs.
-
----
-
-## 🧭 Use case diagram (visible on GitHub)
-
-```mermaid
-sequenceDiagram
-  participant F as Frontend
-  participant A as Auth API
-  participant S as Stock API
-  participant DB as Auth DB
-
-  F->>A: POST /auth/login (user, pass)
-  A->>DB: Validate user / generate token
-  DB-->>A: token, payload
-  A-->>F: {token, expires_at}
-
-  F->>S: GET /stock/items\nHeader: token
-  S->>A: POST /check-token (token)
-  A->>DB: SELECT + conditional UPDATE modified_at
-  DB-->>A: payload or 401
-  A-->>S: valid payload
-  S-->>F: authorized data
-```
-
----
-
-## 🧱 Security & cache
-- Tokens stored centrally in DB (no Redis needed).
-- Short TTL (2–5 min).
+- No tokens in URLs.
+- Tokens stored centrally in DB.
+- Short TTL (2–5 min). Cache life, must be defined in one single place in code.
 - Conditional atomic renewal to prevent DB contention.
 - Revocation: delete from table.
 - Logs: minimal (token, endpoint, ts, ip).
 
----
+
+## 🧭 Use case diagram
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor UI as Frontend (UI)
+  participant BACK as Backend (Stock / Sales / Manufacturing)
+  participant AUTH as Auth API
+
+  %% 1. Login
+  UI->>AUTH: POST /auth/login { user, pass }
+  AUTH-->>UI: { token }
+
+  %% 2. Request from UI to Back
+  UI->>BACK: GET /{service_id_string}/{user_id_string}\nheaders: token
+
+  %% 3. Cache check + request to Out
+  alt Valid local cache (<= 1 min)
+    BACK-->>UI: responds using cached payload
+  else Expired or missing cache, valid token in Out
+    BACK->>AUTH: POST /check-token\n{ token, service_id, user_id }
+    AUTH-->>BACK: { valid: true, payload }
+    BACK-->>UI: responds and saves payload in cache (1 min)
+  else Expired or missing cache, invalid token in Out
+    BACK->>AUTH: POST /check-token\n{ token, service_id, user_id }
+    AUTH-->>BACK: { valid: false }
+    BACK-->>UI: 401 Unauthorized
+  end
+
+  %% 4. Writes always validated
+  Note over BACK,AUTH: Write operations (POST / PATCH / DELETE)\nalways query Out without using local cache.
+
+  %% 5. Logout
+  UI->>AUTH: POST /auth/logout { token }
+  AUTH-->>UI: 200 Logged out
+```
+
 
 MIT © Eqeqo
