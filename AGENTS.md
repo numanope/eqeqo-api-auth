@@ -3,17 +3,15 @@
 ## 🔧 Tasks for agents
 1. **Generate all success and fail tests in the currents api_test.rs file.**
    - Use the current structure, fixing server creation error and updating test cases on the list. dont change test technique.
-/* OMIT FOR NOW
 3. **Add token renewal logic**
-   - Atomic SQL: `UPDATE ... RETURNING` + fallback `SELECT`.
-   - Respect `TOKEN_TTL_SECONDS` and `TOKEN_RENEW_THRESHOLD_SECONDS`.
+- keep it minimal.
 5. **Require header `token:` in all protected routes.**
 6. **On user delete**, remove related tokens.
 7. **Add minimal logging**
    - Record token, endpoint, timestamp, IP.
 8. **Add cleanup job**
    - Periodically remove expired tokens.
-*/
+
 
 **Done criteria:**
 - Token-based auth fully functional.
@@ -34,6 +32,8 @@ Issues and validates access tokens for all other APIs.
 - Use imperative commit prefixes: `feat:`, `fix:`, `refactor:`, `docs:`.
 - Include SQL or curl samples in PRs that change endpoints.
 - Updates on db structure must be done in original db code, no migrations yet. None should be need by now.
+- Avoid adding dependencies.
+- Keep processes minimal.
 
 ## Security Checklist
 - Never commit `.env` or credentials.
