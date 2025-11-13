@@ -1123,7 +1123,14 @@ pub async fn check_person_permission_in_service(req: &Request) -> Response {
   };
   let payload: CheckPermissionPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(err) => {
+      eprintln!(
+        "[parse-error] check_permission body='{}' err={}",
+        req.body.replace('\n', "\\n"),
+        err
+      );
+      return error_response(StatusCode::BadRequest, "Invalid request body");
+    }
   };
   match sqlx::query_scalar::<_, bool>(
     "SELECT * FROM auth.check_person_permission_in_service($1, $2, $3)",
