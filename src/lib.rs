@@ -1,6 +1,4 @@
-#[macro_use]
-extern crate httpageboy;
-use httpageboy::{Rt, Server};
+use httpageboy::{Rt, Server, handler};
 use tokio::time::Duration;
 pub mod auth;
 mod database;
