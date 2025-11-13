@@ -101,7 +101,15 @@ CREATE OR REPLACE PROCEDURE auth.update_role(p_id INT, p_name TEXT) AS $$
 BEGIN
     UPDATE auth.role
     SET name = COALESCE(p_name, name)
-    WHERE id = p_id;
+    WHERE id = p_id
+      AND (
+        p_name IS NULL
+        OR NOT EXISTS (
+            SELECT 1 FROM auth.role r2
+            WHERE r2.name = p_name
+              AND r2.id <> p_id
+        )
+      );
 END;
 $$ LANGUAGE plpgsql;
 
@@ -139,7 +147,15 @@ CREATE OR REPLACE PROCEDURE auth.update_permission(p_id INT, p_name TEXT) AS $$
 BEGIN
     UPDATE auth.permission
     SET name = COALESCE(p_name, name)
-    WHERE id = p_id;
+    WHERE id = p_id
+      AND (
+        p_name IS NULL
+        OR NOT EXISTS (
+            SELECT 1 FROM auth.permission p2
+            WHERE p2.name = p_name
+              AND p2.id <> p_id
+        )
+      );
 END;
 $$ LANGUAGE plpgsql;
 
