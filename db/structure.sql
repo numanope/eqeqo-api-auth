@@ -47,16 +47,6 @@ CREATE TABLE auth.services (
 
 -- Linking Tables
 
--- Role-Permissions
-CREATE TABLE auth.role_permission (
-  id SERIAL PRIMARY KEY,
-  role_id INTEGER REFERENCES auth.role(id) ON DELETE CASCADE NOT NULL,
-  permission_id INTEGER REFERENCES auth.permission(id) ON DELETE CASCADE NOT NULL,
-  created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
-  updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
-  UNIQUE (role_id, permission_id)
-);
-
 -- Service-Roles (as required by API)
 CREATE TABLE auth.service_roles (
   id SERIAL PRIMARY KEY,
@@ -65,6 +55,16 @@ CREATE TABLE auth.service_roles (
   created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
   updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
   UNIQUE (service_id, role_id)
+);
+
+-- Permissions scoped to service-role pairs
+CREATE TABLE auth.service_role_permission (
+  id SERIAL PRIMARY KEY,
+  service_role_id INTEGER REFERENCES auth.service_roles(id) ON DELETE CASCADE NOT NULL,
+  permission_id INTEGER REFERENCES auth.permission(id) ON DELETE CASCADE NOT NULL,
+  created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  UNIQUE (service_role_id, permission_id)
 );
 
 -- Person-Service-Roles (as required by API, replaces user's person_role)
@@ -130,13 +130,13 @@ BEFORE INSERT OR UPDATE ON auth.services
 FOR EACH ROW
 EXECUTE FUNCTION auth.set_epoch_audit_fields();
 
-CREATE TRIGGER trg_auth_role_permission_audit
-BEFORE INSERT OR UPDATE ON auth.role_permission
+CREATE TRIGGER trg_auth_service_roles_audit
+BEFORE INSERT OR UPDATE ON auth.service_roles
 FOR EACH ROW
 EXECUTE FUNCTION auth.set_epoch_audit_fields();
 
-CREATE TRIGGER trg_auth_service_roles_audit
-BEFORE INSERT OR UPDATE ON auth.service_roles
+CREATE TRIGGER trg_auth_service_role_permission_audit
+BEFORE INSERT OR UPDATE ON auth.service_role_permission
 FOR EACH ROW
 EXECUTE FUNCTION auth.set_epoch_audit_fields();
 

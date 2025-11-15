@@ -218,31 +218,63 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Role-permission relationships
-CREATE OR REPLACE PROCEDURE auth.assign_permission_to_role(p_role_id INT, p_permission_id INT) AS $$
+-- Service-scoped role-permission relationships
+CREATE OR REPLACE PROCEDURE auth.assign_permission_to_role(
+    p_service_id INT,
+    p_role_id INT,
+    p_permission_id INT
+) AS $$
+DECLARE
+    v_service_role_id INT;
 BEGIN
-    INSERT INTO auth.role_permission (role_id, permission_id)
-    VALUES (p_role_id, p_permission_id)
-    ON CONFLICT (role_id, permission_id) DO NOTHING;
+    SELECT id INTO v_service_role_id
+    FROM auth.service_roles
+    WHERE service_id = p_service_id
+      AND role_id = p_role_id;
+
+    IF v_service_role_id IS NULL THEN
+        RAISE EXCEPTION 'Role % is not assigned to service %', p_role_id, p_service_id;
+    END IF;
+
+    INSERT INTO auth.service_role_permission (service_role_id, permission_id)
+    VALUES (v_service_role_id, p_permission_id)
+    ON CONFLICT (service_role_id, permission_id) DO NOTHING;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE PROCEDURE auth.remove_permission_from_role(p_role_id INT, p_permission_id INT) AS $$
+CREATE OR REPLACE PROCEDURE auth.remove_permission_from_role(
+    p_service_id INT,
+    p_role_id INT,
+    p_permission_id INT
+) AS $$
+DECLARE
+    v_service_role_id INT;
 BEGIN
-    DELETE FROM auth.role_permission
-    WHERE role_id = p_role_id
+    SELECT id INTO v_service_role_id
+    FROM auth.service_roles
+    WHERE service_id = p_service_id
+      AND role_id = p_role_id;
+
+    IF v_service_role_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    DELETE FROM auth.service_role_permission
+    WHERE service_role_id = v_service_role_id
       AND permission_id = p_permission_id;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION auth.list_role_permissions(p_role_id INT)
+CREATE OR REPLACE FUNCTION auth.list_role_permissions(p_role_id INT, p_service_id INT)
 RETURNS TABLE(id INT, name TEXT) AS $$
 BEGIN
     RETURN QUERY
     SELECT p.id, p.name
     FROM auth.permission p
-    JOIN auth.role_permission rp ON p.id = rp.permission_id
-    WHERE rp.role_id = p_role_id;
+    JOIN auth.service_role_permission srp ON p.id = srp.permission_id
+    JOIN auth.service_roles sr ON srp.service_role_id = sr.id
+    WHERE sr.role_id = p_role_id
+      AND sr.service_id = p_service_id;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -260,6 +292,22 @@ BEGIN
     DELETE FROM auth.service_roles
     WHERE service_id = p_service_id
       AND role_id = p_role_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE PROCEDURE auth.check_service_role_link(
+    p_service_id INT,
+    p_role_id INT,
+    OUT exists BOOLEAN
+) AS $$
+BEGIN
+    SELECT EXISTS (
+        SELECT 1
+        FROM auth.service_roles
+        WHERE service_id = p_service_id
+          AND role_id = p_role_id
+    )
+    INTO exists;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -323,8 +371,11 @@ BEGIN
     RETURN EXISTS (
         SELECT 1
         FROM auth.person_service_role psr
-        JOIN auth.role_permission rp ON psr.role_id = rp.role_id
-        JOIN auth.permission p ON rp.permission_id = p.id
+        JOIN auth.service_roles sr
+          ON sr.service_id = psr.service_id
+         AND sr.role_id = psr.role_id
+        JOIN auth.service_role_permission srp ON srp.service_role_id = sr.id
+        JOIN auth.permission p ON srp.permission_id = p.id
         WHERE psr.person_id = p_person_id
           AND psr.service_id = p_service_id
           AND p.name = p_permission_name

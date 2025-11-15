@@ -2,12 +2,9 @@ use httpageboy::{Request, Response, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{
-  error_response,
-  require_token_without_renew,
-};
 use super::roles::Role;
 use super::users::User;
+use super::{error_response, require_token_without_renew};
 
 #[derive(Deserialize)]
 pub struct ServiceRolePayload {

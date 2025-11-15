@@ -48,24 +48,6 @@ VALUES
   ('viewer1', 'viewer1-hash', 'Viewer One', 'N', 'DNI', '00000006')
 ON CONFLICT (username) DO NOTHING;
 
--- Role permissions
-WITH role_permission_pairs (role_name, permission_name) AS (
-  VALUES
-    ('Admin', 'read'),
-    ('Admin', 'write'),
-    ('Admin', 'update'),
-    ('Admin', 'delete'),
-    ('User', 'read'),
-    ('Editor', 'update'),
-    ('Viewer', 'read')
-)
-INSERT INTO auth.role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM role_permission_pairs rp
-JOIN auth.role r ON r.name = rp.role_name
-JOIN auth.permission p ON p.name = rp.permission_name
-ON CONFLICT (role_id, permission_id) DO NOTHING;
-
 -- Service roles
 WITH service_role_pairs (service_name, role_name) AS (
   VALUES
@@ -80,6 +62,27 @@ FROM service_role_pairs sr
 JOIN auth.services s ON s.name = sr.service_name
 JOIN auth.role r ON r.name = sr.role_name
 ON CONFLICT (service_id, role_id) DO NOTHING;
+
+-- Service-role permissions
+WITH service_role_permission_pairs (service_name, role_name, permission_name) AS (
+  VALUES
+    ('Service A', 'Admin', 'read'),
+    ('Service A', 'Admin', 'write'),
+    ('Service A', 'Admin', 'update'),
+    ('Service A', 'Admin', 'delete'),
+    ('Service A', 'User', 'read'),
+    ('Service B', 'User', 'read'),
+    ('Service C', 'Editor', 'update'),
+    ('Service C', 'Editor', 'read')
+)
+INSERT INTO auth.service_role_permission (service_role_id, permission_id)
+SELECT sr.id, p.id
+FROM service_role_permission_pairs srp
+JOIN auth.services s ON s.name = srp.service_name
+JOIN auth.role r ON r.name = srp.role_name
+JOIN auth.service_roles sr ON sr.service_id = s.id AND sr.role_id = r.id
+JOIN auth.permission p ON p.name = srp.permission_name
+ON CONFLICT (service_role_id, permission_id) DO NOTHING;
 
 -- Person assignments to service roles
 WITH person_service_role_pairs (username, service_name, role_name) AS (

@@ -4,13 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{
-  error_response,
-  get_db_connection,
-  log_access,
-  require_token_without_renew,
-  unauthorized_response,
-  with_auth,
-  with_auth_no_renew,
+  error_response, get_db_connection, log_access, require_token_without_renew,
+  unauthorized_response, with_auth, with_auth_no_renew,
 };
 
 // Basic endpoints

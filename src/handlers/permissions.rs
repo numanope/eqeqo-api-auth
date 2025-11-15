@@ -1,3 +1,4 @@
+use crate::database::DB;
 use httpageboy::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -132,8 +133,38 @@ pub async fn delete_permission(req: &Request) -> Response {
 
 #[derive(Deserialize)]
 pub struct RolePermissionPayload {
+  service_id: i32,
   role_id: i32,
   permission_id: i32,
+}
+
+async fn ensure_service_role_exists(
+  db: &DB,
+  service_id: i32,
+  role_id: i32,
+) -> Result<(), Response> {
+  match sqlx::query_scalar::<_, bool>(
+    "SELECT EXISTS (
+      SELECT 1
+      FROM auth.service_roles
+      WHERE service_id = $1 AND role_id = $2
+    )",
+  )
+    .bind(service_id)
+    .bind(role_id)
+    .fetch_one(db.pool())
+    .await
+  {
+    Ok(true) => Ok(()),
+    Ok(false) => Err(error_response(
+      StatusCode::BadRequest,
+      "Role is not assigned to service",
+    )),
+    Err(_) => Err(error_response(
+      StatusCode::InternalServerError,
+      "Failed to verify service-role link",
+    )),
+  }
 }
 
 pub async fn assign_permission_to_role(req: &Request) -> Response {
@@ -145,7 +176,12 @@ pub async fn assign_permission_to_role(req: &Request) -> Response {
     Ok(p) => p,
     Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
   };
-  match sqlx::query("CALL auth.assign_permission_to_role($1, $2)")
+  if let Err(response) = ensure_service_role_exists(&db, payload.service_id, payload.role_id).await
+  {
+    return response;
+  }
+  match sqlx::query("CALL auth.assign_permission_to_role($1, $2, $3)")
+    .bind(payload.service_id)
     .bind(payload.role_id)
     .bind(payload.permission_id)
     .execute(db.pool())
@@ -172,7 +208,8 @@ pub async fn remove_permission_from_role(req: &Request) -> Response {
     Ok(p) => p,
     Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
   };
-  match sqlx::query("CALL auth.remove_permission_from_role($1, $2)")
+  match sqlx::query("CALL auth.remove_permission_from_role($1, $2, $3)")
+    .bind(payload.service_id)
     .bind(payload.role_id)
     .bind(payload.permission_id)
     .execute(db.pool())
@@ -199,8 +236,13 @@ pub async fn list_role_permissions(req: &Request) -> Response {
     Some(id) => id,
     None => return error_response(StatusCode::BadRequest, "Invalid role ID"),
   };
-  match sqlx::query_as::<_, Permission>("SELECT * FROM auth.list_role_permissions($1)")
+  let service_id: i32 = match req.params.get("service_id").and_then(|s| s.parse().ok()) {
+    Some(id) => id,
+    None => return error_response(StatusCode::BadRequest, "Invalid service ID"),
+  };
+  match sqlx::query_as::<_, Permission>("SELECT * FROM auth.list_role_permissions($1, $2)")
     .bind(id)
+    .bind(service_id)
     .fetch_all(db.pool())
     .await
   {

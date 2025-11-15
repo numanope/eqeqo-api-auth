@@ -1,6 +1,6 @@
-use httpageboy::test_utils::{run_test, setup_test_server, SERVER_URL};
-use httpageboy::Server;
 use auth_api::auth_server;
+use httpageboy::Server;
+use httpageboy::test_utils::{SERVER_URL, run_test, setup_test_server};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -58,7 +58,10 @@ async fn test_logout_missing_token() {
   setup_test_server(|| create_test_server()).await;
   sleep(Duration::from_millis(100)).await;
 
-  run_test(b"POST /auth/logout HTTP/1.1\r\n\r\n", b"Missing token header");
+  run_test(
+    b"POST /auth/logout HTTP/1.1\r\n\r\n",
+    b"Missing token header",
+  );
 }
 
 #[tokio::test]
@@ -77,10 +80,7 @@ async fn test_profile_success() {
     .expect("token value")
     .to_string();
 
-  let profile_request = format!(
-    "GET /auth/profile HTTP/1.1\r\ntoken: {}\r\n\r\n",
-    token
-  );
+  let profile_request = format!("GET /auth/profile HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   run_test(profile_request.as_bytes(), b"\"payload\"");
 }
 
@@ -89,7 +89,10 @@ async fn test_profile_missing_token() {
   setup_test_server(|| create_test_server()).await;
   sleep(Duration::from_millis(100)).await;
 
-  run_test(b"GET /auth/profile HTTP/1.1\r\n\r\n", b"Missing token header");
+  run_test(
+    b"GET /auth/profile HTTP/1.1\r\n\r\n",
+    b"Missing token header",
+  );
 }
 
 #[tokio::test]
@@ -108,10 +111,7 @@ async fn test_check_token_success() {
     .expect("token value")
     .to_string();
 
-  let check_request = format!(
-    "POST /check-token HTTP/1.1\r\ntoken: {}\r\n\r\n",
-    token
-  );
+  let check_request = format!("POST /check-token HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   run_test(check_request.as_bytes(), b"\"valid\":true");
 }
 
@@ -188,8 +188,7 @@ async fn test_user_create_success() {
   );
   let create_request = format!(
     "POST /users HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let expected_username = format!("\"username\":\"{}\"", username);
   run_test(create_request.as_bytes(), expected_username.as_bytes());
@@ -250,8 +249,7 @@ async fn test_user_update_success() {
   );
   let create_request = format!(
     "POST /users HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let create_response = run_test(create_request.as_bytes(), b"\"id\"");
   let user_id_segment = create_response
@@ -327,8 +325,7 @@ async fn test_user_delete_success() {
   );
   let create_request = format!(
     "POST /users HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let create_response = run_test(create_request.as_bytes(), b"\"id\"");
   let user_id_segment = create_response
@@ -402,8 +399,7 @@ async fn test_user_get_success() {
   );
   let create_request = format!(
     "POST /users HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let create_response = run_test(create_request.as_bytes(), b"\"id\"");
   let user_id = create_response
@@ -455,8 +451,7 @@ async fn test_user_get_not_found() {
   );
   let create_request = format!(
     "POST /users HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let create_response = run_test(create_request.as_bytes(), b"\"id\"");
   let user_id = create_response
@@ -540,8 +535,7 @@ async fn test_service_create_success() {
   );
   let create_request = format!(
     "POST /services HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let expected = format!("\"name\":\"{}\"", service_name);
   run_test(create_request.as_bytes(), expected.as_bytes());
@@ -756,8 +750,7 @@ async fn test_role_get_success() {
   let create_body = format!("{{\"name\":\"{}\"}}", role_name);
   let create_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let create_response = run_test(create_request.as_bytes(), b"\"id\"");
   let role_id = create_response
@@ -800,8 +793,7 @@ async fn test_role_get_not_found() {
   let role_name = format!("role_missing_{}", suffix);
   let create_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let create_response = run_test(create_request.as_bytes(), b"\"id\"");
   let role_id = create_response
@@ -851,8 +843,7 @@ async fn test_role_create_success() {
   let create_body = format!("{{\"name\":\"{}\"}}", role_name);
   let create_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let expected = format!("\"name\":\"{}\"", role_name);
   run_test(create_request.as_bytes(), expected.as_bytes());
@@ -905,8 +896,7 @@ async fn test_role_update_success() {
   let create_body = format!("{{\"name\":\"{}\"}}", role_name);
   let create_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let create_response = run_test(create_request.as_bytes(), b"\"id\"");
   let role_id_segment = create_response
@@ -974,8 +964,7 @@ async fn test_role_delete_success() {
   let create_body = format!("{{\"name\":\"{}\"}}", role_name);
   let create_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let create_response = run_test(create_request.as_bytes(), b"\"id\"");
   let role_id_segment = create_response
@@ -1010,10 +999,7 @@ async fn test_role_delete_invalid_id() {
     .expect("token value")
     .to_string();
 
-  let delete_request = format!(
-    "DELETE /roles/invalid HTTP/1.1\r\ntoken: {}\r\n\r\n",
-    token
-  );
+  let delete_request = format!("DELETE /roles/invalid HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   run_test(delete_request.as_bytes(), b"Invalid role ID");
 }
 
@@ -1035,10 +1021,7 @@ async fn test_permissions_list_success() {
     .expect("token value")
     .to_string();
 
-  let list_request = format!(
-    "GET /permissions HTTP/1.1\r\ntoken: {}\r\n\r\n",
-    token
-  );
+  let list_request = format!("GET /permissions HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   run_test(list_request.as_bytes(), b"\"name\":\"read\"");
 }
 
@@ -1047,7 +1030,10 @@ async fn test_permissions_list_missing_token() {
   setup_test_server(|| create_test_server()).await;
   sleep(Duration::from_millis(100)).await;
 
-  run_test(b"GET /permissions HTTP/1.1\r\n\r\n", b"Missing token header");
+  run_test(
+    b"GET /permissions HTTP/1.1\r\n\r\n",
+    b"Missing token header",
+  );
 }
 
 #[tokio::test]
@@ -1074,8 +1060,7 @@ async fn test_permission_create_success() {
   let create_body = format!("{{\"name\":\"{}\"}}", permission_name);
   let create_request = format!(
     "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let expected = format!("\"name\":\"{}\"", permission_name);
   run_test(create_request.as_bytes(), expected.as_bytes());
@@ -1128,8 +1113,7 @@ async fn test_permission_update_success() {
   let create_body = format!("{{\"name\":\"{}\"}}", permission_name);
   let create_request = format!(
     "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let create_response = run_test(create_request.as_bytes(), b"\"id\"");
   let permission_id_segment = create_response
@@ -1197,8 +1181,7 @@ async fn test_permission_delete_success() {
   let create_body = format!("{{\"name\":\"{}\"}}", permission_name);
   let create_request = format!(
     "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_body
+    token, create_body
   );
   let create_response = run_test(create_request.as_bytes(), b"\"id\"");
   let permission_id_segment = create_response
@@ -1265,8 +1248,7 @@ async fn test_role_permissions_assign_success() {
   let role_name = format!("role_relation_{}", suffix_role);
   let create_role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(create_role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -1284,8 +1266,7 @@ async fn test_role_permissions_assign_success() {
   let permission_name = format!("permission_relation_{}", suffix_permission);
   let create_permission_request = format!(
     "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    permission_name
+    token, permission_name
   );
   let permission_response = run_test(create_permission_request.as_bytes(), b"\"id\"");
   let permission_id = permission_response
@@ -1296,15 +1277,45 @@ async fn test_role_permissions_assign_success() {
     .trim()
     .to_string();
 
+  let suffix_service = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_nanos();
+  let service_name = format!("role_perm_service_{}", suffix_service);
+  let service_request = format!(
+    "POST /services HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{name}\",\"description\":\"Role perm\"}}",
+    token,
+    name = service_name
+  );
+  let service_response = run_test(service_request.as_bytes(), b"\"id\"");
+  let service_id = service_response
+    .split("\"id\":")
+    .nth(1)
+    .and_then(|segment| segment.split(|c| c == ',' || c == '}').next())
+    .expect("service id segment")
+    .trim()
+    .to_string();
+
+  let service_role_body = format!(
+    "{{\"service_id\":{service_id},\"role_id\":{role_id}}}",
+    service_id = service_id.clone(),
+    role_id = role_id.clone()
+  );
+  let service_role_request = format!(
+    "POST /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
+    token, service_role_body
+  );
+  run_test(service_role_request.as_bytes(), b"\"status\":\"success\"");
+
   let assign_body = format!(
-    "{{\"role_id\":{},\"permission_id\":{}}}",
-    role_id,
-    permission_id
+    "{{\"service_id\":{service_id},\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
+    service_id = service_id,
+    role_id = role_id,
+    permission_id = permission_id
   );
   let assign_request = format!(
     "POST /role-permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 }
@@ -1315,7 +1326,7 @@ async fn test_role_permissions_assign_missing_token() {
   sleep(Duration::from_millis(100)).await;
 
   run_test(
-    b"POST /role-permissions HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
+    b"POST /role-permissions HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"service_id\":1,\"role_id\":1,\"permission_id\":1}",
     b"Missing token header",
   );
 }
@@ -1343,8 +1354,7 @@ async fn test_role_permissions_list_success() {
   let role_name = format!("role_list_perm_{}", suffix_role);
   let role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -1362,8 +1372,7 @@ async fn test_role_permissions_list_success() {
   let permission_name = format!("perm_list_{}", suffix_permission);
   let permission_request = format!(
     "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    permission_name
+    token, permission_name
   );
   let permission_response = run_test(permission_request.as_bytes(), b"\"id\"");
   let permission_id = permission_response
@@ -1374,21 +1383,52 @@ async fn test_role_permissions_list_success() {
     .trim()
     .to_string();
 
+  let suffix_service = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_nanos();
+  let service_name = format!("role_perm_list_service_{}", suffix_service);
+  let service_request = format!(
+    "POST /services HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{name}\",\"description\":\"Role perm list\"}}",
+    token,
+    name = service_name
+  );
+  let service_response = run_test(service_request.as_bytes(), b"\"id\"");
+  let service_id = service_response
+    .split("\"id\":")
+    .nth(1)
+    .and_then(|segment| segment.split(|c| c == ',' || c == '}').next())
+    .expect("service id segment")
+    .trim()
+    .to_string();
+
+  let service_role_body = format!(
+    "{{\"service_id\":{service_id},\"role_id\":{role_id}}}",
+    service_id = service_id.clone(),
+    role_id = role_id.clone()
+  );
+  let service_role_request = format!(
+    "POST /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
+    token, service_role_body
+  );
+  run_test(service_role_request.as_bytes(), b"\"status\":\"success\"");
+
   let assign_body = format!(
-    "{{\"role_id\":{},\"permission_id\":{}}}",
-    role_id,
-    permission_id
+    "{{\"service_id\":{service_id},\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
+    service_id = service_id.clone(),
+    role_id = role_id.clone(),
+    permission_id = permission_id
   );
   let assign_request = format!(
     "POST /role-permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 
   let list_request = format!(
-    "GET /roles/{id}/permissions HTTP/1.1\r\ntoken: {token}\r\n\r\n",
+    "GET /roles/{id}/permissions?service_id={service_id} HTTP/1.1\r\ntoken: {token}\r\n\r\n",
     id = role_id,
+    service_id = service_id,
     token = token
   );
   let expected = format!("\"name\":\"{}\"", permission_name);
@@ -1412,7 +1452,7 @@ async fn test_role_permissions_list_invalid_role_id() {
     .to_string();
 
   let list_request = format!(
-    "GET /roles/invalid/permissions HTTP/1.1\r\ntoken: {}\r\n\r\n",
+    "GET /roles/invalid/permissions?service_id=1 HTTP/1.1\r\ntoken: {}\r\n\r\n",
     token
   );
   run_test(list_request.as_bytes(), b"Invalid role ID");
@@ -1441,8 +1481,7 @@ async fn test_role_permissions_remove_success() {
   let role_name = format!("role_remove_perm_{}", suffix_role);
   let role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -1460,8 +1499,7 @@ async fn test_role_permissions_remove_success() {
   let permission_name = format!("perm_remove_{}", suffix_permission);
   let permission_request = format!(
     "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    permission_name
+    token, permission_name
   );
   let permission_response = run_test(permission_request.as_bytes(), b"\"id\"");
   let permission_id = permission_response
@@ -1472,22 +1510,51 @@ async fn test_role_permissions_remove_success() {
     .trim()
     .to_string();
 
+  let suffix_service = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_nanos();
+  let service_name = format!("role_perm_remove_service_{}", suffix_service);
+  let service_request = format!(
+    "POST /services HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{name}\",\"description\":\"Role perm remove\"}}",
+    token,
+    name = service_name
+  );
+  let service_response = run_test(service_request.as_bytes(), b"\"id\"");
+  let service_id = service_response
+    .split("\"id\":")
+    .nth(1)
+    .and_then(|segment| segment.split(|c| c == ',' || c == '}').next())
+    .expect("service id segment")
+    .trim()
+    .to_string();
+
+  let service_role_body = format!(
+    "{{\"service_id\":{service_id},\"role_id\":{role_id}}}",
+    service_id = service_id.clone(),
+    role_id = role_id.clone()
+  );
+  let service_role_request = format!(
+    "POST /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
+    token, service_role_body
+  );
+  run_test(service_role_request.as_bytes(), b"\"status\":\"success\"");
+
   let assign_body = format!(
-    "{{\"role_id\":{},\"permission_id\":{}}}",
-    role_id,
-    permission_id
+    "{{\"service_id\":{service_id},\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
+    service_id = service_id.clone(),
+    role_id = role_id.clone(),
+    permission_id = permission_id.clone()
   );
   let assign_request = format!(
     "POST /role-permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 
   let remove_request = format!(
     "DELETE /role-permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(remove_request.as_bytes(), b"HTTP/1.1 204 No Content");
 }
@@ -1560,8 +1627,7 @@ async fn test_service_roles_assign_success() {
   let role_name = format!("role_service_relation_{}", suffix_role);
   let create_role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(create_role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -1575,8 +1641,7 @@ async fn test_service_roles_assign_success() {
   let assign_body = format!("{{\"service_id\":{},\"role_id\":{}}}", service_id, role_id);
   let assign_request = format!(
     "POST /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 }
@@ -1634,8 +1699,7 @@ async fn test_service_roles_list_success() {
   let role_name = format!("role_for_service_{}", suffix_role);
   let role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -1646,15 +1710,10 @@ async fn test_service_roles_list_success() {
     .trim()
     .to_string();
 
-  let assign_body = format!(
-    "{{\"service_id\":{},\"role_id\":{}}}",
-    service_id,
-    role_id
-  );
+  let assign_body = format!("{{\"service_id\":{},\"role_id\":{}}}", service_id, role_id);
   let assign_request = format!(
     "POST /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 
@@ -1732,8 +1791,7 @@ async fn test_service_roles_remove_success() {
   let role_name = format!("role_remove_service_{}", suffix_role);
   let role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -1744,22 +1802,16 @@ async fn test_service_roles_remove_success() {
     .trim()
     .to_string();
 
-  let assign_body = format!(
-    "{{\"service_id\":{},\"role_id\":{}}}",
-    service_id,
-    role_id
-  );
+  let assign_body = format!("{{\"service_id\":{},\"role_id\":{}}}", service_id, role_id);
   let assign_request = format!(
     "POST /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 
   let remove_request = format!(
     "DELETE /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(remove_request.as_bytes(), b"HTTP/1.1 204 No Content");
 }
@@ -1782,8 +1834,7 @@ async fn test_service_roles_remove_invalid_body() {
 
   let remove_request = format!(
     "DELETE /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    "{"
+    token, "{"
   );
   run_test(remove_request.as_bytes(), b"Invalid request body");
 }
@@ -1822,8 +1873,7 @@ async fn test_person_service_roles_assign_success() {
   );
   let create_user_request = format!(
     "POST /users HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    create_user_body
+    token, create_user_body
   );
   let user_response = run_test(create_user_request.as_bytes(), b"\"id\"");
   let user_id = user_response
@@ -1861,8 +1911,7 @@ async fn test_person_service_roles_assign_success() {
   let role_name = format!("psr_role_{}", suffix_role);
   let create_role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(create_role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -1875,14 +1924,11 @@ async fn test_person_service_roles_assign_success() {
 
   let assign_body = format!(
     "{{\"person_id\":{},\"service_id\":{},\"role_id\":{}}}",
-    user_id,
-    service_id,
-    role_id
+    user_id, service_id, role_id
   );
   let assign_request = format!(
     "POST /person-service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 }
@@ -1963,8 +2009,7 @@ async fn test_person_service_roles_remove_success() {
   let role_name = format!("psr_remove_role_{}", suffix_role);
   let create_role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(create_role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -1977,21 +2022,17 @@ async fn test_person_service_roles_remove_success() {
 
   let assign_body = format!(
     "{{\"person_id\":{},\"service_id\":{},\"role_id\":{}}}",
-    user_id,
-    service_id,
-    role_id
+    user_id, service_id, role_id
   );
   let assign_request = format!(
     "POST /person-service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 
   let remove_request = format!(
     "DELETE /person-service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(remove_request.as_bytes(), b"HTTP/1.1 204 No Content");
 }
@@ -2084,8 +2125,7 @@ async fn test_person_roles_in_service_list_success() {
   let role_name = format!("psr_role_list_{}", suffix_role);
   let create_role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(create_role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -2098,14 +2138,11 @@ async fn test_person_roles_in_service_list_success() {
 
   let assign_body = format!(
     "{{\"person_id\":{},\"service_id\":{},\"role_id\":{}}}",
-    user_id,
-    service_id,
-    role_id
+    user_id, service_id, role_id
   );
   let assign_request = format!(
     "POST /person-service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 
@@ -2231,8 +2268,7 @@ async fn test_persons_with_role_in_service_list_success() {
   let role_name = format!("psr_people_role_{}", suffix_role);
   let create_role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(create_role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -2245,14 +2281,11 @@ async fn test_persons_with_role_in_service_list_success() {
 
   let assign_body = format!(
     "{{\"person_id\":{},\"service_id\":{},\"role_id\":{}}}",
-    user_id,
-    service_id,
-    role_id
+    user_id, service_id, role_id
   );
   let assign_request = format!(
     "POST /person-service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 
@@ -2289,8 +2322,7 @@ async fn test_persons_with_role_in_service_invalid_service_id() {
   let role_name = format!("psr_invalid_role_{}", suffix_role);
   let role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    role_name
+    token, role_name
   );
   let role_response = run_test(role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -2374,8 +2406,7 @@ async fn test_list_services_of_person_success() {
   let services_role_name = format!("services_role_{}", suffix_role);
   let role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    services_role_name
+    token, services_role_name
   );
   let role_response = run_test(role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -2388,14 +2419,11 @@ async fn test_list_services_of_person_success() {
 
   let assign_body = format!(
     "{{\"person_id\":{},\"service_id\":{},\"role_id\":{}}}",
-    user_id,
-    service_id,
-    role_id
+    user_id, service_id, role_id
   );
   let assign_request = format!(
     "POST /person-service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_body
+    token, assign_body
   );
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 
@@ -2477,8 +2505,7 @@ async fn test_check_permission_success() {
   let perm_role_name = format!("perm_role_{}", suffix_role);
   let role_request = format!(
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    perm_role_name
+    token, perm_role_name
   );
   let role_response = run_test(role_request.as_bytes(), b"\"id\"");
   let role_id = role_response
@@ -2496,8 +2523,7 @@ async fn test_check_permission_success() {
   let permission_name = format!("perm_check_{}", suffix_permission);
   let permission_request = format!(
     "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token,
-    permission_name
+    token, permission_name
   );
   let permission_response = run_test(permission_request.as_bytes(), b"\"id\"");
   let permission_id = permission_response
@@ -2507,18 +2533,6 @@ async fn test_check_permission_success() {
     .expect("permission id segment")
     .trim()
     .to_string();
-
-  let assign_permission_body = format!(
-    "{{\"role_id\":{},\"permission_id\":{}}}",
-    role_id,
-    permission_id
-  );
-  let assign_permission_request = format!(
-    "POST /role-permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_permission_body
-  );
-  run_test(assign_permission_request.as_bytes(), b"\"status\":\"success\"");
 
   let suffix_service = std::time::SystemTime::now()
     .duration_since(std::time::UNIX_EPOCH)
@@ -2539,28 +2553,35 @@ async fn test_check_permission_success() {
     .trim()
     .to_string();
 
-  let assign_service_body = format!(
-    "{{\"service_id\":{},\"role_id\":{}}}",
-    service_id,
-    role_id
-  );
+  let assign_service_body = format!("{{\"service_id\":{},\"role_id\":{}}}", service_id, role_id);
   let assign_service_request = format!(
     "POST /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_service_body
+    token, assign_service_body
   );
   run_test(assign_service_request.as_bytes(), b"\"status\":\"success\"");
 
+  let assign_permission_body = format!(
+    "{{\"service_id\":{service_id},\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
+    service_id = service_id,
+    role_id = role_id,
+    permission_id = permission_id
+  );
+  let assign_permission_request = format!(
+    "POST /role-permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
+    token, assign_permission_body
+  );
+  run_test(
+    assign_permission_request.as_bytes(),
+    b"\"status\":\"success\"",
+  );
+
   let assign_person_body = format!(
     "{{\"person_id\":{},\"service_id\":{},\"role_id\":{}}}",
-    user_id,
-    service_id,
-    role_id
+    user_id, service_id, role_id
   );
   let assign_person_request = format!(
     "POST /person-service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token,
-    assign_person_body
+    token, assign_person_body
   );
   run_test(assign_person_request.as_bytes(), b"\"status\":\"success\"");
 
