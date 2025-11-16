@@ -19,3 +19,4 @@ Cargo.lock
 *.swp
 *.bak
 *.tmp
+test.sh
