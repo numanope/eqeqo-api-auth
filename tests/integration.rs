@@ -13,7 +13,8 @@ async fn create_test_server() -> Server {
 }
 
 fn run_test(request: &[u8], expected_response: &[u8]) -> String {
-  let server_url = std::env::var("TEST_SERVER_URL").unwrap_or_else(|_| "127.0.0.1:7878".to_string());
+  let server_url =
+    std::env::var("TEST_SERVER_URL").unwrap_or_else(|_| "127.0.0.1:7878".to_string());
   let mut stream = TcpStream::connect(server_url).expect("Failed to connect to server");
 
   stream.write_all(request).unwrap();
@@ -1222,7 +1223,10 @@ async fn test_permission_delete_success() {
     id = permission_id_segment,
     token = token
   );
-  run_test(delete_request.as_bytes(), b"\"status\":\"permission_deleted\"");
+  run_test(
+    delete_request.as_bytes(),
+    b"\"status\":\"permission_deleted\"",
+  );
 }
 
 #[tokio::test]

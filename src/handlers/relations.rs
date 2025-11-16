@@ -87,10 +87,7 @@ pub async fn list_service_roles(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&roles).unwrap(),
     },
-    Err(_) => error_response(
-      StatusCode::InternalServerError,
-      "list_service_roles_failed",
-    ),
+    Err(_) => error_response(StatusCode::InternalServerError, "list_service_roles_failed"),
   }
 }
 
@@ -122,10 +119,7 @@ pub async fn assign_role_to_person_in_service(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: json!({ "status": "success" }).to_string().into_bytes(),
     },
-    Err(_) => error_response(
-      StatusCode::InternalServerError,
-      "assign_role_person_failed",
-    ),
+    Err(_) => error_response(StatusCode::InternalServerError, "assign_role_person_failed"),
   }
 }
 
@@ -152,10 +146,7 @@ pub async fn remove_role_from_person_in_service(req: &Request) -> Response {
         .to_string()
         .into_bytes(),
     },
-    Err(_) => error_response(
-      StatusCode::InternalServerError,
-      "remove_role_person_failed",
-    ),
+    Err(_) => error_response(StatusCode::InternalServerError, "remove_role_person_failed"),
   }
 }
 
@@ -183,10 +174,7 @@ pub async fn list_person_roles_in_service(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&roles).unwrap(),
     },
-    Err(_) => error_response(
-      StatusCode::InternalServerError,
-      "list_person_roles_failed",
-    ),
+    Err(_) => error_response(StatusCode::InternalServerError, "list_person_roles_failed"),
   }
 }
 
@@ -292,9 +280,6 @@ pub async fn check_person_permission_in_service(req: &Request) -> Response {
         .to_string()
         .into_bytes(),
     },
-    Err(_) => error_response(
-      StatusCode::InternalServerError,
-      "check_permission_failed",
-    ),
+    Err(_) => error_response(StatusCode::InternalServerError, "check_permission_failed"),
   }
 }

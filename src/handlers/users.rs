@@ -73,10 +73,7 @@ pub async fn login(req: &Request) -> Response {
   let issued = match manager.issue_token(user_payload.clone()).await {
     Ok(issue) => issue,
     Err(_) => {
-      return error_response(
-        StatusCode::InternalServerError,
-        "login_issue_failed",
-      );
+      return error_response(StatusCode::InternalServerError, "login_issue_failed");
     }
   };
 
@@ -310,10 +307,7 @@ pub async fn delete_user(req: &Request) -> Response {
         .to_string()
         .into_bytes(),
       },
-      Err(_) => error_response(
-        StatusCode::InternalServerError,
-        "user_token_cleanup_failed",
-      ),
+      Err(_) => error_response(StatusCode::InternalServerError, "user_token_cleanup_failed"),
     },
     Err(_) => error_response(StatusCode::InternalServerError, "delete_user_failed"),
   }

@@ -37,10 +37,7 @@ pub async fn create_permission(req: &Request) -> Response {
     },
     Err(err) => {
       eprintln!("[handler-error] create_permission: {}", err);
-      error_response(
-        StatusCode::InternalServerError,
-        "create_permission_failed",
-      )
+      error_response(StatusCode::InternalServerError, "create_permission_failed")
     }
   }
 }
@@ -59,10 +56,7 @@ pub async fn list_permissions(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&permissions).unwrap(),
     },
-    Err(_) => error_response(
-      StatusCode::InternalServerError,
-      "list_permissions_failed",
-    ),
+    Err(_) => error_response(StatusCode::InternalServerError, "list_permissions_failed"),
   }
 }
 
@@ -97,10 +91,7 @@ pub async fn update_permission(req: &Request) -> Response {
     },
     Err(err) => {
       eprintln!("[handler-error] update_permission: {}", err);
-      error_response(
-        StatusCode::InternalServerError,
-        "update_permission_failed",
-      )
+      error_response(StatusCode::InternalServerError, "update_permission_failed")
     }
   }
 }
@@ -126,10 +117,7 @@ pub async fn delete_permission(req: &Request) -> Response {
         .to_string()
         .into_bytes(),
     },
-    Err(_) => error_response(
-      StatusCode::InternalServerError,
-      "delete_permission_failed",
-    ),
+    Err(_) => error_response(StatusCode::InternalServerError, "delete_permission_failed"),
   }
 }
 
@@ -152,10 +140,10 @@ async fn ensure_service_role_exists(
       WHERE service_id = $1 AND role_id = $2
     )",
   )
-    .bind(service_id)
-    .bind(role_id)
-    .fetch_one(db.pool())
-    .await
+  .bind(service_id)
+  .bind(role_id)
+  .fetch_one(db.pool())
+  .await
   {
     Ok(true) => Ok(()),
     Ok(false) => Err(error_response(
@@ -194,10 +182,7 @@ pub async fn assign_permission_to_role(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: json!({ "status": "success" }).to_string().into_bytes(),
     },
-    Err(_) => error_response(
-      StatusCode::InternalServerError,
-      "assign_permission_failed",
-    ),
+    Err(_) => error_response(StatusCode::InternalServerError, "assign_permission_failed"),
   }
 }
 
@@ -229,10 +214,7 @@ pub async fn remove_permission_from_role(req: &Request) -> Response {
       .to_string()
       .into_bytes(),
     },
-    Err(_) => error_response(
-      StatusCode::InternalServerError,
-      "remove_permission_failed",
-    ),
+    Err(_) => error_response(StatusCode::InternalServerError, "remove_permission_failed"),
   }
 }
 
