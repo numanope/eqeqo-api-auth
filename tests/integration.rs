@@ -12,12 +12,28 @@ async fn create_test_server() -> Server {
   auth_server(&url, 10).await
 }
 
+fn ensure_content_length(request: &[u8]) -> Vec<u8> {
+  let request_string = String::from_utf8_lossy(request);
+  if let Some(split) = request_string.find("\r\n\r\n") {
+    let (headers, body) = request_string.split_at(split);
+    let body = &body[4..];
+    if !body.is_empty() && !headers.to_lowercase().contains("content-length:") {
+      let mut normalized = String::new();
+      normalized.push_str(headers);
+      normalized.push_str(&format!("\r\nContent-Length: {}\r\n\r\n{}", body.len(), body));
+      return normalized.into_bytes();
+    }
+  }
+  request.to_vec()
+}
+
 fn run_test(request: &[u8], expected_response: &[u8]) -> String {
+  let normalized_request = ensure_content_length(request);
   let server_url =
     std::env::var("TEST_SERVER_URL").unwrap_or_else(|_| "127.0.0.1:7878".to_string());
   let mut stream = TcpStream::connect(server_url).expect("Failed to connect to server");
 
-  stream.write_all(request).unwrap();
+  stream.write_all(&normalized_request).unwrap();
   stream.shutdown(std::net::Shutdown::Write).unwrap();
 
   let mut buffer = Vec::new();
@@ -1294,8 +1310,9 @@ async fn test_role_permissions_assign_success() {
     .as_nanos();
   let permission_name = format!("permission_relation_{}", suffix_permission);
   let create_permission_request = format!(
-    "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
-    token, permission_name
+    "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"code\":\"{name}\",\"description\":\"Relation\"}}",
+    token,
+    name = permission_name
   );
   let permission_response = run_test(create_permission_request.as_bytes(), b"\"id\"");
   let permission_id = permission_response
@@ -1306,39 +1323,8 @@ async fn test_role_permissions_assign_success() {
     .trim()
     .to_string();
 
-  let suffix_service = std::time::SystemTime::now()
-    .duration_since(std::time::UNIX_EPOCH)
-    .unwrap()
-    .as_nanos();
-  let service_name = format!("role_perm_service_{}", suffix_service);
-  let service_request = format!(
-    "POST /services HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{name}\",\"description\":\"Role perm\"}}",
-    token,
-    name = service_name
-  );
-  let service_response = run_test(service_request.as_bytes(), b"\"id\"");
-  let service_id = service_response
-    .split("\"id\":")
-    .nth(1)
-    .and_then(|segment| segment.split(|c| c == ',' || c == '}').next())
-    .expect("service id segment")
-    .trim()
-    .to_string();
-
-  let service_role_body = format!(
-    "{{\"service_id\":{service_id},\"role_id\":{role_id}}}",
-    service_id = service_id.clone(),
-    role_id = role_id.clone()
-  );
-  let service_role_request = format!(
-    "POST /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token, service_role_body
-  );
-  run_test(service_role_request.as_bytes(), b"\"status\":\"success\"");
-
   let assign_body = format!(
-    "{{\"service_id\":{service_id},\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
-    service_id = service_id,
+    "{{\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
     role_id = role_id,
     permission_id = permission_id
   );
@@ -1355,7 +1341,7 @@ async fn test_role_permissions_assign_missing_token() {
   sleep(Duration::from_millis(100)).await;
 
   run_test(
-    b"POST /role-permissions HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"service_id\":1,\"role_id\":1,\"permission_id\":1}",
+    b"POST /role-permissions HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"role_id\":1,\"permission_id\":1}",
     b"missing_token_header",
   );
 }
@@ -1412,39 +1398,8 @@ async fn test_role_permissions_list_success() {
     .trim()
     .to_string();
 
-  let suffix_service = std::time::SystemTime::now()
-    .duration_since(std::time::UNIX_EPOCH)
-    .unwrap()
-    .as_nanos();
-  let service_name = format!("role_perm_list_service_{}", suffix_service);
-  let service_request = format!(
-    "POST /services HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{name}\",\"description\":\"Role perm list\"}}",
-    token,
-    name = service_name
-  );
-  let service_response = run_test(service_request.as_bytes(), b"\"id\"");
-  let service_id = service_response
-    .split("\"id\":")
-    .nth(1)
-    .and_then(|segment| segment.split(|c| c == ',' || c == '}').next())
-    .expect("service id segment")
-    .trim()
-    .to_string();
-
-  let service_role_body = format!(
-    "{{\"service_id\":{service_id},\"role_id\":{role_id}}}",
-    service_id = service_id.clone(),
-    role_id = role_id.clone()
-  );
-  let service_role_request = format!(
-    "POST /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token, service_role_body
-  );
-  run_test(service_role_request.as_bytes(), b"\"status\":\"success\"");
-
   let assign_body = format!(
-    "{{\"service_id\":{service_id},\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
-    service_id = service_id.clone(),
+    "{{\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
     role_id = role_id.clone(),
     permission_id = permission_id
   );
@@ -1455,9 +1410,8 @@ async fn test_role_permissions_list_success() {
   run_test(assign_request.as_bytes(), b"\"status\":\"success\"");
 
   let list_request = format!(
-    "GET /roles/{id}/permissions?service_id={service_id} HTTP/1.1\r\ntoken: {token}\r\n\r\n",
+    "GET /roles/{id}/permissions HTTP/1.1\r\ntoken: {token}\r\n\r\n",
     id = role_id,
-    service_id = service_id,
     token = token
   );
   let expected = format!("\"name\":\"{}\"", permission_name);
@@ -1481,7 +1435,7 @@ async fn test_role_permissions_list_invalid_role_id() {
     .to_string();
 
   let list_request = format!(
-    "GET /roles/invalid/permissions?service_id=1 HTTP/1.1\r\ntoken: {}\r\n\r\n",
+    "GET /roles/invalid/permissions HTTP/1.1\r\ntoken: {}\r\n\r\n",
     token
   );
   run_test(list_request.as_bytes(), b"invalid_role_id");
@@ -1539,39 +1493,8 @@ async fn test_role_permissions_remove_success() {
     .trim()
     .to_string();
 
-  let suffix_service = std::time::SystemTime::now()
-    .duration_since(std::time::UNIX_EPOCH)
-    .unwrap()
-    .as_nanos();
-  let service_name = format!("role_perm_remove_service_{}", suffix_service);
-  let service_request = format!(
-    "POST /services HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{name}\",\"description\":\"Role perm remove\"}}",
-    token,
-    name = service_name
-  );
-  let service_response = run_test(service_request.as_bytes(), b"\"id\"");
-  let service_id = service_response
-    .split("\"id\":")
-    .nth(1)
-    .and_then(|segment| segment.split(|c| c == ',' || c == '}').next())
-    .expect("service id segment")
-    .trim()
-    .to_string();
-
-  let service_role_body = format!(
-    "{{\"service_id\":{service_id},\"role_id\":{role_id}}}",
-    service_id = service_id.clone(),
-    role_id = role_id.clone()
-  );
-  let service_role_request = format!(
-    "POST /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token, service_role_body
-  );
-  run_test(service_role_request.as_bytes(), b"\"status\":\"success\"");
-
   let assign_body = format!(
-    "{{\"service_id\":{service_id},\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
-    service_id = service_id.clone(),
+    "{{\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
     role_id = role_id.clone(),
     permission_id = permission_id.clone()
   );

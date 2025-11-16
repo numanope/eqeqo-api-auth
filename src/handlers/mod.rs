@@ -1,6 +1,7 @@
 use crate::auth::{TokenError, TokenManager, TokenValidation};
 use crate::database::DB;
 use httpageboy::{Request, Response, StatusCode};
+use serde::Deserialize;
 use serde_json::json;
 use std::future::Future;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -127,6 +128,135 @@ where
   Fut: Future<Output = Response>,
 {
   with_auth(req, false, action).await
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum FlexibleId {
+  Int(i32),
+  Str(String),
+}
+
+impl FlexibleId {
+  fn parse_int(&self) -> Option<i32> {
+    match self {
+      FlexibleId::Int(value) => Some(*value),
+      FlexibleId::Str(raw) => raw.trim().parse::<i32>().ok(),
+    }
+  }
+
+  fn as_str(&self) -> Option<&str> {
+    match self {
+      FlexibleId::Str(value) => Some(value.as_str()),
+      _ => None,
+    }
+  }
+}
+
+fn extract_digits(value: &str) -> Option<i32> {
+  let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
+  if digits.is_empty() {
+    None
+  } else {
+    digits.parse::<i32>().ok()
+  }
+}
+
+impl From<&str> for FlexibleId {
+  fn from(value: &str) -> Self {
+    value
+      .trim()
+      .parse::<i32>()
+      .map(FlexibleId::Int)
+      .unwrap_or_else(|_| FlexibleId::Str(value.trim().to_string()))
+  }
+}
+
+impl From<String> for FlexibleId {
+  fn from(value: String) -> Self {
+    FlexibleId::from(value.as_str())
+  }
+}
+
+pub(super) async fn resolve_service_id(
+  db: &DB,
+  identifier: &FlexibleId,
+  create_if_missing: bool,
+) -> Result<i32, Response> {
+  if let Some(id) = identifier.parse_int() {
+    return Ok(id);
+  }
+  let name = identifier
+    .as_str()
+    .map(|s| s.trim())
+    .filter(|s| !s.is_empty())
+    .ok_or_else(|| error_response(StatusCode::BadRequest, "invalid_service_id"))?;
+
+  match sqlx::query_scalar::<_, i32>("SELECT id FROM auth.services WHERE name = $1")
+    .bind(name)
+    .fetch_optional(db.pool())
+    .await
+  {
+    Ok(Some(id)) => Ok(id),
+    Ok(None) if create_if_missing => match sqlx::query_scalar::<_, i32>(
+      "INSERT INTO auth.services (name) VALUES ($1)
+        ON CONFLICT (name) DO NOTHING
+        RETURNING id",
+    )
+    .bind(name)
+    .fetch_optional(db.pool())
+    .await
+    {
+      Ok(Some(id)) => Ok(id),
+      Ok(None) => sqlx::query_scalar::<_, i32>("SELECT id FROM auth.services WHERE name = $1")
+        .bind(name)
+        .fetch_one(db.pool())
+        .await
+        .map_err(|_| error_response(StatusCode::InternalServerError, "resolve_service_failed")),
+      Err(_) => Err(error_response(
+        StatusCode::InternalServerError,
+        "resolve_service_failed",
+      )),
+    },
+    Ok(None) => Err(error_response(StatusCode::BadRequest, "invalid_service_id")),
+    Err(_) => Err(error_response(
+      StatusCode::InternalServerError,
+      "resolve_service_failed",
+    )),
+  }
+}
+
+pub(super) async fn resolve_person_id(db: &DB, identifier: &FlexibleId) -> Result<i32, Response> {
+  if let Some(id) = identifier.parse_int() {
+    return Ok(id);
+  }
+  if let Some(str_value) = identifier.as_str() {
+    let trimmed = str_value.trim();
+    if trimmed.starts_with("person-") {
+      if let Some(id) = extract_digits(trimmed) {
+        return Ok(id);
+      }
+    }
+    let username = trimmed;
+    if username.is_empty() {
+      return Err(error_response(StatusCode::BadRequest, "invalid_person_id"));
+    }
+    return match sqlx::query_scalar::<_, i32>(
+      "SELECT id FROM auth.person WHERE username = $1 AND removed_at IS NULL",
+    )
+    .bind(username)
+    .fetch_optional(db.pool())
+    .await
+    {
+      Ok(Some(id)) => Ok(id),
+      Ok(None) => Err(error_response(StatusCode::BadRequest, "person_not_found")),
+      Err(_) => Err(error_response(
+        StatusCode::InternalServerError,
+        "resolve_person_failed",
+      )),
+    };
+  }
+  Err(error_response(StatusCode::BadRequest, "invalid_person_id"))
 }
 
 mod permissions;

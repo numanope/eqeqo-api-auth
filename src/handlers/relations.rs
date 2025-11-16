@@ -4,11 +4,13 @@ use serde_json::json;
 
 use super::roles::Role;
 use super::users::User;
-use super::{error_response, require_token_without_renew};
+use super::{
+  FlexibleId, error_response, require_token_without_renew, resolve_person_id, resolve_service_id,
+};
 
 #[derive(Deserialize)]
 pub struct ServiceRolePayload {
-  service_id: i32,
+  service_id: FlexibleId,
   role_id: i32,
 }
 
@@ -21,8 +23,12 @@ pub async fn assign_role_to_service(req: &Request) -> Response {
     Ok(p) => p,
     Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
+  let service_id = match resolve_service_id(&db, &payload.service_id, true).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
   match sqlx::query("CALL auth.assign_role_to_service($1, $2)")
-    .bind(payload.service_id)
+    .bind(service_id)
     .bind(payload.role_id)
     .execute(db.pool())
     .await
@@ -48,8 +54,12 @@ pub async fn remove_role_from_service(req: &Request) -> Response {
     Ok(p) => p,
     Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
+  let service_id = match resolve_service_id(&db, &payload.service_id, false).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
   match sqlx::query("CALL auth.remove_role_from_service($1, $2)")
-    .bind(payload.service_id)
+    .bind(service_id)
     .bind(payload.role_id)
     .execute(db.pool())
     .await
@@ -73,9 +83,13 @@ pub async fn list_service_roles(req: &Request) -> Response {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
-  let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
-    Some(id) => id,
+  let identifier = match req.params.get("id") {
+    Some(id) => FlexibleId::from(id.clone()),
     None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
+  };
+  let id = match resolve_service_id(&db, &identifier, false).await {
+    Ok(id) => id,
+    Err(response) => return response,
   };
   match sqlx::query_as::<_, Role>("SELECT * FROM auth.list_service_roles($1)")
     .bind(id)
@@ -93,8 +107,8 @@ pub async fn list_service_roles(req: &Request) -> Response {
 
 #[derive(Deserialize)]
 pub struct PersonServiceRolePayload {
-  person_id: i32,
-  service_id: i32,
+  person_id: FlexibleId,
+  service_id: FlexibleId,
   role_id: i32,
 }
 
@@ -107,9 +121,17 @@ pub async fn assign_role_to_person_in_service(req: &Request) -> Response {
     Ok(p) => p,
     Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
+  let person_id = match resolve_person_id(&db, &payload.person_id).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+  let service_id = match resolve_service_id(&db, &payload.service_id, false).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
   match sqlx::query("CALL auth.assign_role_to_person_in_service($1, $2, $3)")
-    .bind(payload.person_id)
-    .bind(payload.service_id)
+    .bind(person_id)
+    .bind(service_id)
     .bind(payload.role_id)
     .execute(db.pool())
     .await
@@ -132,9 +154,17 @@ pub async fn remove_role_from_person_in_service(req: &Request) -> Response {
     Ok(p) => p,
     Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
+  let person_id = match resolve_person_id(&db, &payload.person_id).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+  let service_id = match resolve_service_id(&db, &payload.service_id, false).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
   match sqlx::query("CALL auth.remove_role_from_person_in_service($1, $2, $3)")
-    .bind(payload.person_id)
-    .bind(payload.service_id)
+    .bind(person_id)
+    .bind(service_id)
     .bind(payload.role_id)
     .execute(db.pool())
     .await
@@ -155,13 +185,21 @@ pub async fn list_person_roles_in_service(req: &Request) -> Response {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
-  let person_id: i32 = match req.params.get("person_id").and_then(|s| s.parse().ok()) {
-    Some(id) => id,
+  let person_identifier = match req.params.get("person_id") {
+    Some(value) => FlexibleId::from(value.clone()),
     None => return error_response(StatusCode::BadRequest, "invalid_person_id"),
   };
-  let service_id: i32 = match req.params.get("service_id").and_then(|s| s.parse().ok()) {
-    Some(id) => id,
+  let service_identifier = match req.params.get("service_id") {
+    Some(value) => FlexibleId::from(value.clone()),
     None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
+  };
+  let person_id = match resolve_person_id(&db, &person_identifier).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+  let service_id = match resolve_service_id(&db, &service_identifier, false).await {
+    Ok(id) => id,
+    Err(response) => return response,
   };
   match sqlx::query_as::<_, Role>("SELECT * FROM auth.list_person_roles_in_service($1, $2)")
     .bind(person_id)
@@ -183,13 +221,17 @@ pub async fn list_persons_with_role_in_service(req: &Request) -> Response {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
-  let service_id: i32 = match req.params.get("service_id").and_then(|s| s.parse().ok()) {
-    Some(id) => id,
+  let service_identifier = match req.params.get("service_id") {
+    Some(value) => FlexibleId::from(value.clone()),
     None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
   };
   let role_id: i32 = match req.params.get("role_id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
     None => return error_response(StatusCode::BadRequest, "invalid_role_id"),
+  };
+  let service_id = match resolve_service_id(&db, &service_identifier, false).await {
+    Ok(id) => id,
+    Err(response) => return response,
   };
   match sqlx::query_as::<_, User>(
     "SELECT id, username, name FROM auth.list_persons_with_role_in_service($1, $2)",
@@ -213,8 +255,8 @@ pub async fn list_persons_with_role_in_service(req: &Request) -> Response {
 
 #[derive(Deserialize)]
 pub struct CheckPermissionPayload {
-  person_id: i32,
-  service_id: i32,
+  person_id: FlexibleId,
+  service_id: FlexibleId,
   permission_name: String,
 }
 
@@ -232,14 +274,8 @@ fn parse_check_permission_payload(req: &Request) -> Result<CheckPermissionPayloa
     }
   }
 
-  let person_id = req
-    .params
-    .get("person_id")
-    .and_then(|value| value.parse::<i32>().ok());
-  let service_id = req
-    .params
-    .get("service_id")
-    .and_then(|value| value.parse::<i32>().ok());
+  let person_id = req.params.get("person_id").cloned().map(FlexibleId::from);
+  let service_id = req.params.get("service_id").cloned().map(FlexibleId::from);
   let permission_name = req.params.get("permission_name").cloned();
 
   match (person_id, service_id, permission_name) {
@@ -264,11 +300,19 @@ pub async fn check_person_permission_in_service(req: &Request) -> Response {
     Ok(payload) => payload,
     Err(response) => return response,
   };
+  let person_id = match resolve_person_id(&db, &payload.person_id).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+  let service_id = match resolve_service_id(&db, &payload.service_id, false).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
   match sqlx::query_scalar::<_, bool>(
     "SELECT * FROM auth.check_person_permission_in_service($1, $2, $3)",
   )
-  .bind(payload.person_id)
-  .bind(payload.service_id)
+  .bind(person_id)
+  .bind(service_id)
   .bind(payload.permission_name)
   .fetch_one(db.pool())
   .await
