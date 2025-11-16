@@ -1,12 +1,37 @@
 use auth_api::auth_server;
 use httpageboy::Server;
-use httpageboy::test_utils::{SERVER_URL, run_test, setup_test_server};
+use httpageboy::test_utils::setup_test_server;
+use std::io::{Read, Write};
+use std::net::TcpStream;
 use std::time::Duration;
 use tokio::time::sleep;
 
 async fn create_test_server() -> Server {
   let _ = dotenvy::dotenv();
-  auth_server(SERVER_URL, 10).await
+  let url = std::env::var("TEST_SERVER_URL").unwrap_or_else(|_| "127.0.0.1:7878".to_string());
+  auth_server(&url, 10).await
+}
+
+fn run_test(request: &[u8], expected_response: &[u8]) -> String {
+  let server_url = std::env::var("TEST_SERVER_URL").unwrap_or_else(|_| "127.0.0.1:7878".to_string());
+  let mut stream = TcpStream::connect(server_url).expect("Failed to connect to server");
+
+  stream.write_all(request).unwrap();
+  stream.shutdown(std::net::Shutdown::Write).unwrap();
+
+  let mut buffer = Vec::new();
+  stream.read_to_end(&mut buffer).unwrap();
+
+  let buffer_string = String::from_utf8_lossy(&buffer).to_string();
+  let expected_response_string = String::from_utf8_lossy(expected_response).to_string();
+
+  assert!(
+    buffer_string.contains(&expected_response_string),
+    "ASSERT FAILED:\n\nRECEIVED: {} \nEXPECTED: {} \n\n",
+    buffer_string,
+    expected_response_string
+  );
+  buffer_string
 }
 
 // Authentication
@@ -29,7 +54,7 @@ async fn test_login_invalid_password() {
 
   run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"wrong\"}",
-    b"Invalid credentials",
+    b"invalid_credentials",
   );
 }
 
@@ -60,7 +85,7 @@ async fn test_logout_missing_token() {
 
   run_test(
     b"POST /auth/logout HTTP/1.1\r\n\r\n",
-    b"Missing token header",
+    b"missing_token_header",
   );
 }
 
@@ -91,7 +116,7 @@ async fn test_profile_missing_token() {
 
   run_test(
     b"GET /auth/profile HTTP/1.1\r\n\r\n",
-    b"Missing token header",
+    b"missing_token_header",
   );
 }
 
@@ -122,7 +147,7 @@ async fn test_check_token_invalid_token() {
 
   run_test(
     b"POST /check-token HTTP/1.1\r\ntoken: invalid\r\n\r\n",
-    b"Invalid token",
+    b"invalid_token",
   );
 }
 
@@ -153,7 +178,7 @@ async fn test_users_list_missing_token() {
   setup_test_server(|| create_test_server()).await;
   sleep(Duration::from_millis(100)).await;
 
-  run_test(b"GET /users HTTP/1.1\r\n\r\n", b"Missing token header");
+  run_test(b"GET /users HTTP/1.1\r\n\r\n", b"missing_token_header");
 }
 
 #[tokio::test]
@@ -214,7 +239,7 @@ async fn test_user_create_invalid_body() {
     "POST /users HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\ntest",
     token
   );
-  run_test(create_request.as_bytes(), b"Invalid request body");
+  run_test(create_request.as_bytes(), b"invalid_request_body");
 }
 
 #[tokio::test]
@@ -290,7 +315,7 @@ async fn test_user_update_invalid_id() {
     "PUT /users/invalid-id HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"Nobody\"}}",
     token
   );
-  run_test(update_request.as_bytes(), b"Invalid user ID");
+  run_test(update_request.as_bytes(), b"invalid_user_id");
 }
 
 #[tokio::test]
@@ -341,7 +366,7 @@ async fn test_user_delete_success() {
     id = user_id_segment,
     token = token
   );
-  run_test(delete_request.as_bytes(), b"HTTP/1.1 204 No Content");
+  run_test(delete_request.as_bytes(), b"\"status\":\"user_deleted\"");
 }
 
 #[tokio::test]
@@ -364,7 +389,7 @@ async fn test_user_delete_invalid_id() {
     "DELETE /users/invalid-id HTTP/1.1\r\ntoken: {}\r\n\r\n",
     token
   );
-  run_test(delete_request.as_bytes(), b"Invalid user ID");
+  run_test(delete_request.as_bytes(), b"invalid_user_id");
 }
 
 #[tokio::test]
@@ -467,14 +492,14 @@ async fn test_user_get_not_found() {
     id = &user_id,
     token = token
   );
-  run_test(delete_request.as_bytes(), b"HTTP/1.1 204 No Content");
+  run_test(delete_request.as_bytes(), b"\"status\":\"user_deleted\"");
 
   let get_request = format!(
     "GET /users/{id} HTTP/1.1\r\ntoken: {token}\r\n\r\n",
     id = user_id,
     token = token
   );
-  run_test(get_request.as_bytes(), b"User not found");
+  run_test(get_request.as_bytes(), b"user_not_found");
 }
 
 // Services
@@ -504,7 +529,7 @@ async fn test_services_list_missing_token() {
   setup_test_server(|| create_test_server()).await;
   sleep(Duration::from_millis(100)).await;
 
-  run_test(b"GET /services HTTP/1.1\r\n\r\n", b"Missing token header");
+  run_test(b"GET /services HTTP/1.1\r\n\r\n", b"missing_token_header");
 }
 
 #[tokio::test]
@@ -561,7 +586,7 @@ async fn test_service_create_invalid_body() {
     "POST /services HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n---",
     token
   );
-  run_test(create_request.as_bytes(), b"Invalid request body");
+  run_test(create_request.as_bytes(), b"invalid_request_body");
 }
 
 #[tokio::test]
@@ -627,7 +652,7 @@ async fn test_service_update_invalid_id() {
     "PUT /services/not-a-number HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"description\":\"noop\"}}",
     token
   );
-  run_test(update_request.as_bytes(), b"Invalid service ID");
+  run_test(update_request.as_bytes(), b"invalid_service_id");
 }
 
 #[tokio::test]
@@ -670,7 +695,7 @@ async fn test_service_delete_success() {
     id = service_id,
     token = token
   );
-  run_test(delete_request.as_bytes(), b"HTTP/1.1 204 No Content");
+  run_test(delete_request.as_bytes(), b"\"status\":\"service_deleted\"");
 }
 
 #[tokio::test]
@@ -693,7 +718,7 @@ async fn test_service_delete_invalid_id() {
     "DELETE /services/invalid HTTP/1.1\r\ntoken: {}\r\n\r\n",
     token
   );
-  run_test(delete_request.as_bytes(), b"Invalid service ID");
+  run_test(delete_request.as_bytes(), b"invalid_service_id");
 }
 
 // Roles
@@ -723,7 +748,7 @@ async fn test_roles_list_missing_token() {
   setup_test_server(|| create_test_server()).await;
   sleep(Duration::from_millis(100)).await;
 
-  run_test(b"GET /roles HTTP/1.1\r\n\r\n", b"Missing token header");
+  run_test(b"GET /roles HTTP/1.1\r\n\r\n", b"missing_token_header");
 }
 
 #[tokio::test]
@@ -809,14 +834,14 @@ async fn test_role_get_not_found() {
     id = role_id,
     token = token
   );
-  run_test(delete_request.as_bytes(), b"HTTP/1.1 204 No Content");
+  run_test(delete_request.as_bytes(), b"\"status\":\"role_deleted\"");
 
   let get_request = format!(
     "GET /roles/{id} HTTP/1.1\r\ntoken: {token}\r\n\r\n",
     id = role_id,
     token = token
   );
-  run_test(get_request.as_bytes(), b"Role not found");
+  run_test(get_request.as_bytes(), b"role_not_found");
 }
 
 #[tokio::test]
@@ -869,7 +894,7 @@ async fn test_role_create_invalid_body() {
     "POST /roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n---",
     token
   );
-  run_test(create_request.as_bytes(), b"Invalid request body");
+  run_test(create_request.as_bytes(), b"invalid_request_body");
 }
 
 #[tokio::test]
@@ -937,7 +962,7 @@ async fn test_role_update_invalid_id() {
     "PUT /roles/invalid HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"Oops\"}}",
     token
   );
-  run_test(update_request.as_bytes(), b"Invalid role ID");
+  run_test(update_request.as_bytes(), b"invalid_role_id");
 }
 
 #[tokio::test]
@@ -980,7 +1005,7 @@ async fn test_role_delete_success() {
     id = role_id_segment,
     token = token
   );
-  run_test(delete_request.as_bytes(), b"HTTP/1.1 204 No Content");
+  run_test(delete_request.as_bytes(), b"\"status\":\"role_deleted\"");
 }
 
 #[tokio::test]
@@ -1000,7 +1025,7 @@ async fn test_role_delete_invalid_id() {
     .to_string();
 
   let delete_request = format!("DELETE /roles/invalid HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
-  run_test(delete_request.as_bytes(), b"Invalid role ID");
+  run_test(delete_request.as_bytes(), b"invalid_role_id");
 }
 
 // Permissions
@@ -1032,7 +1057,7 @@ async fn test_permissions_list_missing_token() {
 
   run_test(
     b"GET /permissions HTTP/1.1\r\n\r\n",
-    b"Missing token header",
+    b"missing_token_header",
   );
 }
 
@@ -1086,7 +1111,7 @@ async fn test_permission_create_invalid_body() {
     "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{",
     token
   );
-  run_test(create_request.as_bytes(), b"Invalid request body");
+  run_test(create_request.as_bytes(), b"invalid_request_body");
 }
 
 #[tokio::test]
@@ -1154,7 +1179,7 @@ async fn test_permission_update_invalid_id() {
     "PUT /permissions/invalid HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"Oops\"}}",
     token
   );
-  run_test(update_request.as_bytes(), b"Invalid permission ID");
+  run_test(update_request.as_bytes(), b"invalid_permission_id");
 }
 
 #[tokio::test]
@@ -1197,7 +1222,7 @@ async fn test_permission_delete_success() {
     id = permission_id_segment,
     token = token
   );
-  run_test(delete_request.as_bytes(), b"HTTP/1.1 204 No Content");
+  run_test(delete_request.as_bytes(), b"\"status\":\"permission_deleted\"");
 }
 
 #[tokio::test]
@@ -1220,7 +1245,7 @@ async fn test_permission_delete_invalid_id() {
     "DELETE /permissions/invalid HTTP/1.1\r\ntoken: {}\r\n\r\n",
     token
   );
-  run_test(delete_request.as_bytes(), b"Invalid permission ID");
+  run_test(delete_request.as_bytes(), b"invalid_permission_id");
 }
 
 // Role-Permission relations
@@ -1327,7 +1352,7 @@ async fn test_role_permissions_assign_missing_token() {
 
   run_test(
     b"POST /role-permissions HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"service_id\":1,\"role_id\":1,\"permission_id\":1}",
-    b"Missing token header",
+    b"missing_token_header",
   );
 }
 
@@ -1455,7 +1480,7 @@ async fn test_role_permissions_list_invalid_role_id() {
     "GET /roles/invalid/permissions?service_id=1 HTTP/1.1\r\ntoken: {}\r\n\r\n",
     token
   );
-  run_test(list_request.as_bytes(), b"Invalid role ID");
+  run_test(list_request.as_bytes(), b"invalid_role_id");
 }
 
 #[tokio::test]
@@ -1556,7 +1581,10 @@ async fn test_role_permissions_remove_success() {
     "DELETE /role-permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
     token, assign_body
   );
-  run_test(remove_request.as_bytes(), b"HTTP/1.1 204 No Content");
+  run_test(
+    remove_request.as_bytes(),
+    b"\"status\":\"permission_removed_from_role\"",
+  );
 }
 
 #[tokio::test]
@@ -1579,7 +1607,7 @@ async fn test_role_permissions_remove_invalid_body() {
     "DELETE /role-permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\nnot-json",
     token
   );
-  run_test(remove_request.as_bytes(), b"Invalid request body");
+  run_test(remove_request.as_bytes(), b"invalid_request_body");
 }
 
 // Service-Roles relations
@@ -1653,7 +1681,7 @@ async fn test_service_roles_assign_missing_token() {
 
   run_test(
     b"POST /service-roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
-    b"Missing token header",
+    b"missing_token_header",
   );
 }
 
@@ -1746,7 +1774,7 @@ async fn test_service_roles_list_invalid_service_id() {
     "GET /services/invalid/roles HTTP/1.1\r\ntoken: {}\r\n\r\n",
     token
   );
-  run_test(list_request.as_bytes(), b"Invalid service ID");
+  run_test(list_request.as_bytes(), b"invalid_service_id");
 }
 
 #[tokio::test]
@@ -1813,7 +1841,10 @@ async fn test_service_roles_remove_success() {
     "DELETE /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
     token, assign_body
   );
-  run_test(remove_request.as_bytes(), b"HTTP/1.1 204 No Content");
+  run_test(
+    remove_request.as_bytes(),
+    b"\"status\":\"role_removed_from_service\"",
+  );
 }
 
 #[tokio::test]
@@ -1836,7 +1867,7 @@ async fn test_service_roles_remove_invalid_body() {
     "DELETE /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
     token, "{"
   );
-  run_test(remove_request.as_bytes(), b"Invalid request body");
+  run_test(remove_request.as_bytes(), b"invalid_request_body");
 }
 
 // Person-Service-Roles relations
@@ -1940,7 +1971,7 @@ async fn test_person_service_roles_assign_missing_token() {
 
   run_test(
     b"POST /person-service-roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
-    b"Missing token header",
+    b"missing_token_header",
   );
 }
 
@@ -2034,7 +2065,10 @@ async fn test_person_service_roles_remove_success() {
     "DELETE /person-service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
     token, assign_body
   );
-  run_test(remove_request.as_bytes(), b"HTTP/1.1 204 No Content");
+  run_test(
+    remove_request.as_bytes(),
+    b"\"status\":\"role_removed_from_person\"",
+  );
 }
 
 #[tokio::test]
@@ -2057,7 +2091,7 @@ async fn test_person_service_roles_remove_invalid_body() {
     "DELETE /person-service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n-",
     token
   );
-  run_test(remove_request.as_bytes(), b"Invalid request body");
+  run_test(remove_request.as_bytes(), b"invalid_request_body");
 }
 
 #[tokio::test]
@@ -2200,7 +2234,7 @@ async fn test_person_roles_in_service_invalid_service_id() {
     person_id = user_id,
     token = token
   );
-  run_test(list_request.as_bytes(), b"Invalid service ID");
+  run_test(list_request.as_bytes(), b"invalid_service_id");
 }
 
 #[tokio::test]
@@ -2338,7 +2372,7 @@ async fn test_persons_with_role_in_service_invalid_service_id() {
     role_id = role_id,
     token = token
   );
-  run_test(list_request.as_bytes(), b"Invalid service ID");
+  run_test(list_request.as_bytes(), b"invalid_service_id");
 }
 
 #[tokio::test]
@@ -2456,7 +2490,7 @@ async fn test_list_services_of_person_invalid_id() {
     "GET /people/invalid/services HTTP/1.1\r\ntoken: {}\r\n\r\n",
     token
   );
-  run_test(list_request.as_bytes(), b"Invalid person ID");
+  run_test(list_request.as_bytes(), b"invalid_person_id");
 }
 
 #[tokio::test]
@@ -2620,5 +2654,5 @@ async fn test_check_permission_invalid_body() {
     "GET /check-permission HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n",
     token
   );
-  run_test(check_request.as_bytes(), b"Invalid request body");
+  run_test(check_request.as_bytes(), b"invalid_request_body");
 }

@@ -22,7 +22,7 @@ pub async fn create_role(req: &Request) -> Response {
   };
   let payload: CreateRolePayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query_as::<_, Role>("SELECT * FROM auth.create_role($1)")
     .bind(payload.name)
@@ -34,7 +34,7 @@ pub async fn create_role(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&role).unwrap(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to create role"),
+    Err(_) => error_response(StatusCode::InternalServerError, "create_role_failed"),
   }
 }
 
@@ -52,7 +52,7 @@ pub async fn list_roles(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&roles).unwrap(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to fetch roles"),
+    Err(_) => error_response(StatusCode::InternalServerError, "list_roles_failed"),
   }
 }
 
@@ -63,7 +63,7 @@ pub async fn get_role(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid role ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_role_id"),
   };
   match sqlx::query_as::<_, Role>("SELECT * FROM auth.get_role($1)")
     .bind(id)
@@ -75,8 +75,8 @@ pub async fn get_role(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&role).unwrap(),
     },
-    Ok(None) => error_response(StatusCode::NotFound, "Role not found"),
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to fetch role"),
+    Ok(None) => error_response(StatusCode::NotFound, "role_not_found"),
+    Err(_) => error_response(StatusCode::InternalServerError, "get_role_failed"),
   }
 }
 
@@ -92,11 +92,11 @@ pub async fn update_role(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid role ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_role_id"),
   };
   let payload: UpdateRolePayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query("CALL auth.update_role($1, $2)")
     .bind(id)
@@ -111,7 +111,7 @@ pub async fn update_role(req: &Request) -> Response {
     },
     Err(err) => {
       eprintln!("[handler-error] update_role: {}", err);
-      error_response(StatusCode::InternalServerError, "Failed to update role")
+      error_response(StatusCode::InternalServerError, "update_role_failed")
     }
   }
 }
@@ -123,7 +123,7 @@ pub async fn delete_role(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid role ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_role_id"),
   };
   match sqlx::query("CALL auth.delete_role($1)")
     .bind(id)
@@ -131,10 +131,12 @@ pub async fn delete_role(req: &Request) -> Response {
     .await
   {
     Ok(_) => Response {
-      status: StatusCode::NoContent.to_string(),
+      status: StatusCode::Ok.to_string(),
       content_type: "application/json".to_string(),
-      content: Vec::new(),
+      content: json!({ "status": "role_deleted", "role_id": id })
+        .to_string()
+        .into_bytes(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to delete role"),
+    Err(_) => error_response(StatusCode::InternalServerError, "delete_role_failed"),
   }
 }

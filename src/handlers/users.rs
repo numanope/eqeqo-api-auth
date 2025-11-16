@@ -34,7 +34,7 @@ struct AuthUser {
 pub async fn login(req: &Request) -> Response {
   let payload: LoginPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
 
   let db = match get_db_connection().await {
@@ -50,17 +50,17 @@ pub async fn login(req: &Request) -> Response {
   .await
   {
     Ok(Some(user)) => user,
-    Ok(None) => return unauthorized_response("Invalid credentials"),
+    Ok(None) => return unauthorized_response("invalid_credentials"),
     Err(_) => {
       return error_response(
         StatusCode::InternalServerError,
-        "Failed to query user credentials",
+        "login_lookup_failed",
       );
     }
   };
 
   if user.password_hash != payload.password {
-    return unauthorized_response("Invalid credentials");
+    return unauthorized_response("invalid_credentials");
   }
 
   let user_payload = json!({
@@ -75,7 +75,7 @@ pub async fn login(req: &Request) -> Response {
     Err(_) => {
       return error_response(
         StatusCode::InternalServerError,
-        "Failed to create login token",
+        "login_issue_failed",
       );
     }
   };
@@ -104,7 +104,7 @@ pub async fn logout(req: &Request) -> Response {
         content_type: "application/json".to_string(),
         content: json!({ "status": "logged_out" }).to_string().into_bytes(),
       },
-      Err(_) => error_response(StatusCode::InternalServerError, "Failed to revoke token"),
+      Err(_) => error_response(StatusCode::InternalServerError, "logout_failed"),
     }
   })
   .await
@@ -172,7 +172,7 @@ pub async fn create_user(req: &Request) -> Response {
   };
   let payload: CreateUserPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
 
   // Note: In a real app, you'd want to handle these enums more gracefully.
@@ -200,7 +200,7 @@ pub async fn create_user(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&user).unwrap(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to create user"),
+    Err(_) => error_response(StatusCode::InternalServerError, "create_user_failed"),
   }
 }
 
@@ -218,7 +218,7 @@ pub async fn list_people(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&users).unwrap(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to fetch users"),
+    Err(_) => error_response(StatusCode::InternalServerError, "list_users_failed"),
   }
 }
 
@@ -229,7 +229,7 @@ pub async fn get_user(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid user ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_user_id"),
   };
   match sqlx::query_as::<_, User>("SELECT id, username, name FROM auth.get_person($1)")
     .bind(id)
@@ -241,8 +241,8 @@ pub async fn get_user(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&user).unwrap(),
     },
-    Ok(None) => error_response(StatusCode::NotFound, "User not found"),
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to fetch user"),
+    Ok(None) => error_response(StatusCode::NotFound, "user_not_found"),
+    Err(_) => error_response(StatusCode::InternalServerError, "get_user_failed"),
   }
 }
 
@@ -260,11 +260,11 @@ pub async fn update_user(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid user ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_user_id"),
   };
   let payload: UpdateUserPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query("CALL auth.update_person($1, $2, $3, $4)")
     .bind(id)
@@ -279,7 +279,7 @@ pub async fn update_user(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: json!({ "status": "success" }).to_string().into_bytes(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to update user"),
+    Err(_) => error_response(StatusCode::InternalServerError, "update_user_failed"),
   }
 }
 
@@ -290,7 +290,7 @@ pub async fn delete_user(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid user ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_user_id"),
   };
   let manager = TokenManager::new(db.pool());
   match sqlx::query("CALL auth.delete_person($1)")
@@ -299,17 +299,23 @@ pub async fn delete_user(req: &Request) -> Response {
     .await
   {
     Ok(_) => match manager.delete_tokens_for_user(id).await {
-      Ok(_) => Response {
-        status: StatusCode::NoContent.to_string(),
+      Ok(revoked) => Response {
+        status: StatusCode::Ok.to_string(),
         content_type: "application/json".to_string(),
-        content: Vec::new(),
+        content: json!({
+          "status": "user_deleted",
+          "user_id": id,
+          "revoked_tokens": revoked
+        })
+        .to_string()
+        .into_bytes(),
       },
       Err(_) => error_response(
         StatusCode::InternalServerError,
-        "Failed to remove user tokens",
+        "user_token_cleanup_failed",
       ),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to delete user"),
+    Err(_) => error_response(StatusCode::InternalServerError, "delete_user_failed"),
   }
 }
 

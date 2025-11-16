@@ -68,14 +68,14 @@ async fn require_token(
 ) -> Result<(DB, TokenValidation, String), Response> {
   let token = match extract_token(req) {
     Some(value) => value,
-    None => return Err(unauthorized_response("Missing token header")),
+    None => return Err(unauthorized_response("missing_token_header")),
   };
   let db = match DB::new().await {
     Ok(db) => db,
     Err(_) => {
       return Err(error_response(
         StatusCode::InternalServerError,
-        "Failed to connect to database",
+        "db_unavailable",
       ));
     }
   };
@@ -85,11 +85,11 @@ async fn require_token(
       log_access(&token, req);
       Ok((db, validation, token))
     }
-    Err(TokenError::NotFound) => Err(unauthorized_response("Invalid token")),
-    Err(TokenError::Expired) => Err(unauthorized_response("Expired token")),
+    Err(TokenError::NotFound) => Err(unauthorized_response("invalid_token")),
+    Err(TokenError::Expired) => Err(unauthorized_response("expired_token")),
     Err(TokenError::Database(_)) => Err(error_response(
       StatusCode::InternalServerError,
-      "Failed to validate token",
+      "token_validation_failed",
     )),
   }
 }
@@ -105,7 +105,7 @@ pub(super) async fn get_db_connection() -> Result<DB, Response> {
     Ok(db) => Ok(db),
     Err(_) => Err(error_response(
       StatusCode::InternalServerError,
-      "Failed to connect to database",
+      "db_unavailable",
     )),
   }
 }

@@ -23,7 +23,7 @@ pub async fn create_permission(req: &Request) -> Response {
   };
   let payload: CreatePermissionPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query_as::<_, Permission>("SELECT * FROM auth.create_permission($1)")
     .bind(payload.name)
@@ -39,7 +39,7 @@ pub async fn create_permission(req: &Request) -> Response {
       eprintln!("[handler-error] create_permission: {}", err);
       error_response(
         StatusCode::InternalServerError,
-        "Failed to create permission",
+        "create_permission_failed",
       )
     }
   }
@@ -61,7 +61,7 @@ pub async fn list_permissions(req: &Request) -> Response {
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to fetch permissions",
+      "list_permissions_failed",
     ),
   }
 }
@@ -78,11 +78,11 @@ pub async fn update_permission(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid permission ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_permission_id"),
   };
   let payload: UpdatePermissionPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query("CALL auth.update_permission($1, $2)")
     .bind(id)
@@ -99,7 +99,7 @@ pub async fn update_permission(req: &Request) -> Response {
       eprintln!("[handler-error] update_permission: {}", err);
       error_response(
         StatusCode::InternalServerError,
-        "Failed to update permission",
+        "update_permission_failed",
       )
     }
   }
@@ -112,7 +112,7 @@ pub async fn delete_permission(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid permission ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_permission_id"),
   };
   match sqlx::query("CALL auth.delete_permission($1)")
     .bind(id)
@@ -120,13 +120,15 @@ pub async fn delete_permission(req: &Request) -> Response {
     .await
   {
     Ok(_) => Response {
-      status: StatusCode::NoContent.to_string(),
+      status: StatusCode::Ok.to_string(),
       content_type: "application/json".to_string(),
-      content: Vec::new(),
+      content: json!({ "status": "permission_deleted", "permission_id": id })
+        .to_string()
+        .into_bytes(),
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to delete permission",
+      "delete_permission_failed",
     ),
   }
 }
@@ -158,11 +160,11 @@ async fn ensure_service_role_exists(
     Ok(true) => Ok(()),
     Ok(false) => Err(error_response(
       StatusCode::BadRequest,
-      "Role is not assigned to service",
+      "role_not_in_service",
     )),
     Err(_) => Err(error_response(
       StatusCode::InternalServerError,
-      "Failed to verify service-role link",
+      "service_role_check_failed",
     )),
   }
 }
@@ -174,7 +176,7 @@ pub async fn assign_permission_to_role(req: &Request) -> Response {
   };
   let payload: RolePermissionPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   if let Err(response) = ensure_service_role_exists(&db, payload.service_id, payload.role_id).await
   {
@@ -194,7 +196,7 @@ pub async fn assign_permission_to_role(req: &Request) -> Response {
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to assign permission to role",
+      "assign_permission_failed",
     ),
   }
 }
@@ -206,7 +208,7 @@ pub async fn remove_permission_from_role(req: &Request) -> Response {
   };
   let payload: RolePermissionPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query("CALL auth.remove_permission_from_role($1, $2, $3)")
     .bind(payload.service_id)
@@ -216,13 +218,20 @@ pub async fn remove_permission_from_role(req: &Request) -> Response {
     .await
   {
     Ok(_) => Response {
-      status: StatusCode::NoContent.to_string(),
+      status: StatusCode::Ok.to_string(),
       content_type: "application/json".to_string(),
-      content: Vec::new(),
+      content: json!({
+        "status": "permission_removed_from_role",
+        "service_id": payload.service_id,
+        "role_id": payload.role_id,
+        "permission_id": payload.permission_id
+      })
+      .to_string()
+      .into_bytes(),
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to remove permission from role",
+      "remove_permission_failed",
     ),
   }
 }
@@ -234,11 +243,11 @@ pub async fn list_role_permissions(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid role ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_role_id"),
   };
   let service_id: i32 = match req.params.get("service_id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid service ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
   };
   match sqlx::query_as::<_, Permission>("SELECT * FROM auth.list_role_permissions($1, $2)")
     .bind(id)
@@ -253,7 +262,7 @@ pub async fn list_role_permissions(req: &Request) -> Response {
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to fetch role permissions",
+      "list_role_permissions_failed",
     ),
   }
 }

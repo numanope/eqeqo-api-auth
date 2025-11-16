@@ -24,7 +24,7 @@ pub async fn create_service(req: &Request) -> Response {
   };
   let payload: CreateServicePayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query_as::<_, Service>("SELECT * FROM auth.create_service($1, $2)")
     .bind(payload.name)
@@ -37,7 +37,7 @@ pub async fn create_service(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&service).unwrap(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to create service"),
+    Err(_) => error_response(StatusCode::InternalServerError, "create_service_failed"),
   }
 }
 
@@ -55,7 +55,7 @@ pub async fn list_services(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: serde_json::to_vec(&services).unwrap(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to fetch services"),
+    Err(_) => error_response(StatusCode::InternalServerError, "list_services_failed"),
   }
 }
 
@@ -72,11 +72,11 @@ pub async fn update_service(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid service ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
   };
   let payload: UpdateServicePayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query("CALL auth.update_service($1, $2, $3)")
     .bind(id)
@@ -90,7 +90,7 @@ pub async fn update_service(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: json!({ "status": "success" }).to_string().into_bytes(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to update service"),
+    Err(_) => error_response(StatusCode::InternalServerError, "update_service_failed"),
   }
 }
 
@@ -101,7 +101,7 @@ pub async fn delete_service(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid service ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
   };
   match sqlx::query("CALL auth.delete_service($1)")
     .bind(id)
@@ -109,11 +109,13 @@ pub async fn delete_service(req: &Request) -> Response {
     .await
   {
     Ok(_) => Response {
-      status: StatusCode::NoContent.to_string(),
+      status: StatusCode::Ok.to_string(),
       content_type: "application/json".to_string(),
-      content: Vec::new(),
+      content: json!({ "status": "service_deleted", "service_id": id })
+        .to_string()
+        .into_bytes(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to delete service"),
+    Err(_) => error_response(StatusCode::InternalServerError, "delete_service_failed"),
   }
 }
 
@@ -124,7 +126,7 @@ pub async fn list_services_of_person(req: &Request) -> Response {
   };
   let person_id: i32 = match req.params.get("person_id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid person ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_person_id"),
   };
   match sqlx::query_as::<_, Service>(
     "SELECT id, name, NULL as description FROM auth.list_services_of_person($1)",
@@ -140,7 +142,7 @@ pub async fn list_services_of_person(req: &Request) -> Response {
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to fetch services of person",
+      "list_person_services_failed",
     ),
   }
 }

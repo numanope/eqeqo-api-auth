@@ -19,7 +19,7 @@ pub async fn assign_role_to_service(req: &Request) -> Response {
   };
   let payload: ServiceRolePayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query("CALL auth.assign_role_to_service($1, $2)")
     .bind(payload.service_id)
@@ -34,7 +34,7 @@ pub async fn assign_role_to_service(req: &Request) -> Response {
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to assign role to service",
+      "assign_role_service_failed",
     ),
   }
 }
@@ -46,7 +46,7 @@ pub async fn remove_role_from_service(req: &Request) -> Response {
   };
   let payload: ServiceRolePayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query("CALL auth.remove_role_from_service($1, $2)")
     .bind(payload.service_id)
@@ -55,13 +55,15 @@ pub async fn remove_role_from_service(req: &Request) -> Response {
     .await
   {
     Ok(_) => Response {
-      status: StatusCode::NoContent.to_string(),
+      status: StatusCode::Ok.to_string(),
       content_type: "application/json".to_string(),
-      content: Vec::new(),
+      content: json!({ "status": "role_removed_from_service" })
+        .to_string()
+        .into_bytes(),
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to remove role from service",
+      "remove_role_service_failed",
     ),
   }
 }
@@ -73,7 +75,7 @@ pub async fn list_service_roles(req: &Request) -> Response {
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid service ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
   };
   match sqlx::query_as::<_, Role>("SELECT * FROM auth.list_service_roles($1)")
     .bind(id)
@@ -87,7 +89,7 @@ pub async fn list_service_roles(req: &Request) -> Response {
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to fetch service roles",
+      "list_service_roles_failed",
     ),
   }
 }
@@ -106,7 +108,7 @@ pub async fn assign_role_to_person_in_service(req: &Request) -> Response {
   };
   let payload: PersonServiceRolePayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query("CALL auth.assign_role_to_person_in_service($1, $2, $3)")
     .bind(payload.person_id)
@@ -122,7 +124,7 @@ pub async fn assign_role_to_person_in_service(req: &Request) -> Response {
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to assign role to person in service",
+      "assign_role_person_failed",
     ),
   }
 }
@@ -134,7 +136,7 @@ pub async fn remove_role_from_person_in_service(req: &Request) -> Response {
   };
   let payload: PersonServiceRolePayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
-    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
   match sqlx::query("CALL auth.remove_role_from_person_in_service($1, $2, $3)")
     .bind(payload.person_id)
@@ -144,13 +146,15 @@ pub async fn remove_role_from_person_in_service(req: &Request) -> Response {
     .await
   {
     Ok(_) => Response {
-      status: StatusCode::NoContent.to_string(),
+      status: StatusCode::Ok.to_string(),
       content_type: "application/json".to_string(),
-      content: Vec::new(),
+      content: json!({ "status": "role_removed_from_person" })
+        .to_string()
+        .into_bytes(),
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to remove role from person in service",
+      "remove_role_person_failed",
     ),
   }
 }
@@ -162,11 +166,11 @@ pub async fn list_person_roles_in_service(req: &Request) -> Response {
   };
   let person_id: i32 = match req.params.get("person_id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid person ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_person_id"),
   };
   let service_id: i32 = match req.params.get("service_id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid service ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
   };
   match sqlx::query_as::<_, Role>("SELECT * FROM auth.list_person_roles_in_service($1, $2)")
     .bind(person_id)
@@ -181,7 +185,7 @@ pub async fn list_person_roles_in_service(req: &Request) -> Response {
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to fetch person roles in service",
+      "list_person_roles_failed",
     ),
   }
 }
@@ -193,11 +197,11 @@ pub async fn list_persons_with_role_in_service(req: &Request) -> Response {
   };
   let service_id: i32 = match req.params.get("service_id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid service ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
   };
   let role_id: i32 = match req.params.get("role_id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
-    None => return error_response(StatusCode::BadRequest, "Invalid role ID"),
+    None => return error_response(StatusCode::BadRequest, "invalid_role_id"),
   };
   match sqlx::query_as::<_, User>(
     "SELECT id, username, name FROM auth.list_persons_with_role_in_service($1, $2)",
@@ -214,7 +218,7 @@ pub async fn list_persons_with_role_in_service(req: &Request) -> Response {
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to fetch persons with role in service",
+      "list_persons_with_role_failed",
     ),
   }
 }
@@ -258,7 +262,7 @@ fn parse_check_permission_payload(req: &Request) -> Result<CheckPermissionPayloa
     }),
     _ => Err(error_response(
       StatusCode::BadRequest,
-      "Invalid request body",
+      "invalid_request_body",
     )),
   }
 }
@@ -290,7 +294,7 @@ pub async fn check_person_permission_in_service(req: &Request) -> Response {
     },
     Err(_) => error_response(
       StatusCode::InternalServerError,
-      "Failed to check permission",
+      "check_permission_failed",
     ),
   }
 }
