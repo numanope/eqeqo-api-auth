@@ -1,4 +1,5 @@
 use auth_api::auth_server;
+use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::OnceLock;
@@ -34,6 +35,235 @@ fn server_url() -> String {
     .clone()
 }
 
+async fn ensure_service(pool: &Pool<Postgres>, name: &str, description: &str) -> Result<i32, sqlx::Error> {
+  if let Some(id) = sqlx::query_scalar::<_, i32>(
+    "INSERT INTO auth.services (name, description) VALUES ($1, $2)
+      ON CONFLICT (name) DO NOTHING
+      RETURNING id",
+  )
+  .bind(name)
+  .bind(description)
+  .fetch_optional(pool)
+  .await?
+  {
+    return Ok(id);
+  }
+  sqlx::query_scalar::<_, i32>("SELECT id FROM auth.services WHERE name = $1")
+    .bind(name)
+    .fetch_one(pool)
+    .await
+}
+
+async fn ensure_role(pool: &Pool<Postgres>, name: &str) -> Result<i32, sqlx::Error> {
+  if let Some(id) = sqlx::query_scalar::<_, i32>(
+    "INSERT INTO auth.role (name) VALUES ($1)
+      ON CONFLICT (name) DO NOTHING
+      RETURNING id",
+  )
+  .bind(name)
+  .fetch_optional(pool)
+  .await?
+  {
+    return Ok(id);
+  }
+  sqlx::query_scalar::<_, i32>("SELECT id FROM auth.role WHERE name = $1")
+    .bind(name)
+    .fetch_one(pool)
+    .await
+}
+
+async fn ensure_permission(pool: &Pool<Postgres>, name: &str) -> Result<i32, sqlx::Error> {
+  if let Some(id) = sqlx::query_scalar::<_, i32>(
+    "INSERT INTO auth.permission (name) VALUES ($1)
+      ON CONFLICT (name) DO NOTHING
+      RETURNING id",
+  )
+  .bind(name)
+  .fetch_optional(pool)
+  .await?
+  {
+    return Ok(id);
+  }
+  sqlx::query_scalar::<_, i32>("SELECT id FROM auth.permission WHERE name = $1")
+    .bind(name)
+    .fetch_one(pool)
+    .await
+}
+
+async fn ensure_person(
+  pool: &Pool<Postgres>,
+  username: &str,
+  password_hash: &str,
+  name: &str,
+  person_type: &str,
+  document_type: &str,
+  document_number: &str,
+) -> Result<i32, sqlx::Error> {
+  if let Some(id) = sqlx::query_scalar::<_, i32>(
+    "INSERT INTO auth.person (username, password_hash, name, person_type, document_type, document_number)
+      VALUES ($1, $2, $3, $4::auth.person_type, $5::auth.document_type, $6)
+      ON CONFLICT (username) DO UPDATE SET removed_at = NULL
+      RETURNING id",
+  )
+  .bind(username)
+  .bind(password_hash)
+  .bind(name)
+  .bind(person_type)
+  .bind(document_type)
+  .bind(document_number)
+  .fetch_optional(pool)
+  .await?
+  {
+    return Ok(id);
+  }
+  sqlx::query_scalar::<_, i32>("SELECT id FROM auth.person WHERE username = $1")
+    .bind(username)
+    .fetch_one(pool)
+    .await
+}
+
+async fn ensure_service_role(pool: &Pool<Postgres>, service_id: i32, role_id: i32) -> Result<(), sqlx::Error> {
+  sqlx::query(
+    "INSERT INTO auth.service_roles (service_id, role_id) VALUES ($1, $2)
+      ON CONFLICT (service_id, role_id) DO NOTHING",
+  )
+  .bind(service_id)
+  .bind(role_id)
+  .execute(pool)
+  .await?;
+  Ok(())
+}
+
+async fn ensure_role_permission(pool: &Pool<Postgres>, role_id: i32, permission_id: i32) -> Result<(), sqlx::Error> {
+  sqlx::query(
+    "INSERT INTO auth.role_permission (role_id, permission_id) VALUES ($1, $2)
+      ON CONFLICT (role_id, permission_id) DO NOTHING",
+  )
+  .bind(role_id)
+  .bind(permission_id)
+  .execute(pool)
+  .await?;
+  Ok(())
+}
+
+async fn ensure_person_service_role(
+  pool: &Pool<Postgres>,
+  person_id: i32,
+  service_id: i32,
+  role_id: i32,
+) -> Result<(), sqlx::Error> {
+  sqlx::query(
+    "INSERT INTO auth.person_service_role (person_id, service_id, role_id) VALUES ($1, $2, $3)
+      ON CONFLICT (person_id, service_id, role_id) DO NOTHING",
+  )
+  .bind(person_id)
+  .bind(service_id)
+  .bind(role_id)
+  .execute(pool)
+  .await?;
+  Ok(())
+}
+
+async fn seed_demo_data(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
+  let service_a = ensure_service(pool, "Service A", "Demo catalog service").await?;
+  let service_b = ensure_service(pool, "Service B", "Internal billing service").await?;
+  let service_c = ensure_service(pool, "Service C", "Customer support portal").await?;
+
+  let role_admin = ensure_role(pool, "Admin").await?;
+  let role_user = ensure_role(pool, "User").await?;
+  let role_editor = ensure_role(pool, "Editor").await?;
+  let _role_viewer = ensure_role(pool, "Viewer").await?;
+
+  let perm_read = ensure_permission(pool, "read").await?;
+  let perm_write = ensure_permission(pool, "write").await?;
+  let perm_update = ensure_permission(pool, "update").await?;
+  let perm_delete = ensure_permission(pool, "delete").await?;
+  let _perm_share = ensure_permission(pool, "share").await?;
+
+  let person_adm1 = ensure_person(
+    pool,
+    "adm1",
+    "adm1-hash",
+    "Admin One",
+    "N",
+    "DNI",
+    "00000001",
+  )
+  .await?;
+  let person_usr1 = ensure_person(
+    pool,
+    "usr1",
+    "usr1-hash",
+    "User One",
+    "N",
+    "DNI",
+    "00000002",
+  )
+  .await?;
+  let person_usr2 = ensure_person(
+    pool,
+    "usr2",
+    "usr2-hash",
+    "User Two",
+    "N",
+    "DNI",
+    "00000003",
+  )
+  .await?;
+  let person_usr3 = ensure_person(
+    pool,
+    "usr3",
+    "usr3-hash",
+    "User Three",
+    "N",
+    "DNI",
+    "00000004",
+  )
+  .await?;
+
+  ensure_service_role(pool, service_a, role_admin).await?;
+  ensure_service_role(pool, service_a, role_user).await?;
+  ensure_service_role(pool, service_b, role_user).await?;
+  ensure_service_role(pool, service_c, role_editor).await?;
+
+  ensure_role_permission(pool, role_admin, perm_read).await?;
+  ensure_role_permission(pool, role_admin, perm_write).await?;
+  ensure_role_permission(pool, role_admin, perm_update).await?;
+  ensure_role_permission(pool, role_admin, perm_delete).await?;
+  ensure_role_permission(pool, role_user, perm_read).await?;
+  ensure_role_permission(pool, role_editor, perm_update).await?;
+  ensure_role_permission(pool, role_editor, perm_read).await?;
+
+  ensure_person_service_role(pool, person_adm1, service_a, role_admin).await?;
+  ensure_person_service_role(pool, person_usr1, service_a, role_user).await?;
+  ensure_person_service_role(pool, person_usr2, service_b, role_user).await?;
+  ensure_person_service_role(pool, person_usr3, service_c, role_editor).await?;
+
+  Ok(())
+}
+
+fn prepare_database() {
+  static SEEDED: OnceLock<()> = OnceLock::new();
+  SEEDED.get_or_init(|| {
+    let _ = dotenvy::dotenv();
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for tests");
+    let handle = thread::spawn(move || {
+      let runtime = Runtime::new().expect("failed to create runtime");
+      runtime.block_on(async {
+        let pool = PgPoolOptions::new()
+          .max_connections(5)
+          .connect(&database_url)
+          .await
+          .expect("failed to connect to database for tests");
+        seed_demo_data(&pool)
+          .await
+          .expect("failed to seed baseline auth data");
+      });
+    });
+    handle.join().expect("db seed thread panicked");
+  });
+}
+
 fn wait_for_server(url: &str) {
   for _ in 0..50 {
     if TcpStream::connect(url).is_ok() {
@@ -47,6 +277,7 @@ fn wait_for_server(url: &str) {
 fn start_server() {
   static STARTED: OnceLock<()> = OnceLock::new();
   STARTED.get_or_init(|| {
+    prepare_database();
     let url = server_url();
     let listen_addr = url.clone();
     thread::spawn(move || {
