@@ -24,6 +24,3 @@ sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1", features = ["full"] }
 rand = "0.8"
 sha2 = "0.10"
-
-[patch.crates-io]
-httpageboy = { path = "vendor/httpageboy" }

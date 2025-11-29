@@ -1,15 +1,63 @@
 use auth_api::auth_server;
-use httpageboy::Server;
-use httpageboy::test_utils::setup_test_server;
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::sync::OnceLock;
+use std::thread;
 use std::time::Duration;
-use tokio::time::sleep;
+use tokio::runtime::Runtime;
 
-async fn create_test_server() -> Server {
-  let _ = dotenvy::dotenv();
-  let url = std::env::var("TEST_SERVER_URL").unwrap_or_else(|_| "127.0.0.1:7878".to_string());
-  auth_server(&url, 10).await
+fn normalize_url(url: String) -> String {
+  if let Some(stripped) = url.strip_prefix("http://") {
+    stripped.to_string()
+  } else if let Some(stripped) = url.strip_prefix("https://") {
+    stripped.to_string()
+  } else {
+    url
+  }
+}
+
+fn server_url() -> String {
+  static URL: OnceLock<String> = OnceLock::new();
+  URL
+    .get_or_init(|| {
+      let _ = dotenvy::dotenv();
+      if let Ok(url) = std::env::var("SERVER_URL") {
+        normalize_url(url)
+      } else if let Ok(url) = std::env::var("TEST_SERVER_URL") {
+        normalize_url(url)
+      } else if let Ok(port) = std::env::var("SERVER_PORT") {
+        format!("127.0.0.1:{}", port)
+      } else {
+        "127.0.0.1:7878".to_string()
+      }
+    })
+    .clone()
+}
+
+fn wait_for_server(url: &str) {
+  for _ in 0..50 {
+    if TcpStream::connect(url).is_ok() {
+      return;
+    }
+    thread::sleep(Duration::from_millis(100));
+  }
+  panic!("Server did not start at {}", url);
+}
+
+fn start_server() {
+  static STARTED: OnceLock<()> = OnceLock::new();
+  STARTED.get_or_init(|| {
+    let url = server_url();
+    let listen_addr = url.clone();
+    thread::spawn(move || {
+      let runtime = Runtime::new().expect("failed to create runtime");
+      runtime.block_on(async move {
+        let server = auth_server(&listen_addr, 4).await;
+        server.run().await;
+      });
+    });
+    wait_for_server(&url);
+  });
 }
 
 fn ensure_content_length(request: &[u8]) -> Vec<u8> {
@@ -28,9 +76,9 @@ fn ensure_content_length(request: &[u8]) -> Vec<u8> {
 }
 
 fn run_test(request: &[u8], expected_response: &[u8]) -> String {
+  start_server();
   let normalized_request = ensure_content_length(request);
-  let server_url =
-    std::env::var("TEST_SERVER_URL").unwrap_or_else(|_| "127.0.0.1:7878".to_string());
+  let server_url = server_url();
   let mut stream = TcpStream::connect(server_url).expect("Failed to connect to server");
 
   stream.write_all(&normalized_request).unwrap();
@@ -55,9 +103,6 @@ fn run_test(request: &[u8], expected_response: &[u8]) -> String {
 
 #[tokio::test]
 async fn test_login_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -66,9 +111,6 @@ async fn test_login_success() {
 
 #[tokio::test]
 async fn test_login_invalid_password() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"wrong\"}",
     b"invalid_credentials",
@@ -77,9 +119,6 @@ async fn test_login_invalid_password() {
 
 #[tokio::test]
 async fn test_logout_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -97,9 +136,6 @@ async fn test_logout_success() {
 
 #[tokio::test]
 async fn test_logout_missing_token() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(
     b"POST /auth/logout HTTP/1.1\r\n\r\n",
     b"missing_token_header",
@@ -108,9 +144,6 @@ async fn test_logout_missing_token() {
 
 #[tokio::test]
 async fn test_profile_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -128,9 +161,6 @@ async fn test_profile_success() {
 
 #[tokio::test]
 async fn test_profile_missing_token() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(
     b"GET /auth/profile HTTP/1.1\r\n\r\n",
     b"missing_token_header",
@@ -139,9 +169,6 @@ async fn test_profile_missing_token() {
 
 #[tokio::test]
 async fn test_check_token_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -159,9 +186,6 @@ async fn test_check_token_success() {
 
 #[tokio::test]
 async fn test_check_token_invalid_token() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(
     b"POST /check-token HTTP/1.1\r\ntoken: invalid\r\n\r\n",
     b"invalid_token",
@@ -172,9 +196,6 @@ async fn test_check_token_invalid_token() {
 
 #[tokio::test]
 async fn test_users_list_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -192,17 +213,11 @@ async fn test_users_list_success() {
 
 #[tokio::test]
 async fn test_users_list_missing_token() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(b"GET /users HTTP/1.1\r\n\r\n", b"missing_token_header");
 }
 
 #[tokio::test]
 async fn test_user_create_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -238,9 +253,6 @@ async fn test_user_create_success() {
 
 #[tokio::test]
 async fn test_user_create_invalid_body() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -261,9 +273,6 @@ async fn test_user_create_invalid_body() {
 
 #[tokio::test]
 async fn test_user_update_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -314,9 +323,6 @@ async fn test_user_update_success() {
 
 #[tokio::test]
 async fn test_user_update_invalid_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -337,9 +343,6 @@ async fn test_user_update_invalid_id() {
 
 #[tokio::test]
 async fn test_user_delete_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -388,9 +391,6 @@ async fn test_user_delete_success() {
 
 #[tokio::test]
 async fn test_user_delete_invalid_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -411,9 +411,6 @@ async fn test_user_delete_invalid_id() {
 
 #[tokio::test]
 async fn test_user_get_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -463,9 +460,6 @@ async fn test_user_get_success() {
 
 #[tokio::test]
 async fn test_user_get_not_found() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -523,9 +517,6 @@ async fn test_user_get_not_found() {
 
 #[tokio::test]
 async fn test_services_list_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -543,17 +534,11 @@ async fn test_services_list_success() {
 
 #[tokio::test]
 async fn test_services_list_missing_token() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(b"GET /services HTTP/1.1\r\n\r\n", b"missing_token_header");
 }
 
 #[tokio::test]
 async fn test_service_create_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -585,9 +570,6 @@ async fn test_service_create_success() {
 
 #[tokio::test]
 async fn test_service_create_invalid_body() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -608,9 +590,6 @@ async fn test_service_create_invalid_body() {
 
 #[tokio::test]
 async fn test_service_update_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -651,9 +630,6 @@ async fn test_service_update_success() {
 
 #[tokio::test]
 async fn test_service_update_invalid_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -674,9 +650,6 @@ async fn test_service_update_invalid_id() {
 
 #[tokio::test]
 async fn test_service_delete_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -717,9 +690,6 @@ async fn test_service_delete_success() {
 
 #[tokio::test]
 async fn test_service_delete_invalid_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -742,9 +712,6 @@ async fn test_service_delete_invalid_id() {
 
 #[tokio::test]
 async fn test_roles_list_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -762,17 +729,11 @@ async fn test_roles_list_success() {
 
 #[tokio::test]
 async fn test_roles_list_missing_token() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(b"GET /roles HTTP/1.1\r\n\r\n", b"missing_token_header");
 }
 
 #[tokio::test]
 async fn test_role_get_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -814,9 +775,6 @@ async fn test_role_get_success() {
 
 #[tokio::test]
 async fn test_role_get_not_found() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -863,9 +821,6 @@ async fn test_role_get_not_found() {
 
 #[tokio::test]
 async fn test_role_create_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -893,9 +848,6 @@ async fn test_role_create_success() {
 
 #[tokio::test]
 async fn test_role_create_invalid_body() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -916,9 +868,6 @@ async fn test_role_create_invalid_body() {
 
 #[tokio::test]
 async fn test_role_update_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -961,9 +910,6 @@ async fn test_role_update_success() {
 
 #[tokio::test]
 async fn test_role_update_invalid_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -984,9 +930,6 @@ async fn test_role_update_invalid_id() {
 
 #[tokio::test]
 async fn test_role_delete_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1027,9 +970,6 @@ async fn test_role_delete_success() {
 
 #[tokio::test]
 async fn test_role_delete_invalid_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1049,9 +989,6 @@ async fn test_role_delete_invalid_id() {
 
 #[tokio::test]
 async fn test_permissions_list_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1069,9 +1006,6 @@ async fn test_permissions_list_success() {
 
 #[tokio::test]
 async fn test_permissions_list_missing_token() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(
     b"GET /permissions HTTP/1.1\r\n\r\n",
     b"missing_token_header",
@@ -1080,9 +1014,6 @@ async fn test_permissions_list_missing_token() {
 
 #[tokio::test]
 async fn test_permission_create_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1110,9 +1041,6 @@ async fn test_permission_create_success() {
 
 #[tokio::test]
 async fn test_permission_create_invalid_body() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1133,9 +1061,6 @@ async fn test_permission_create_invalid_body() {
 
 #[tokio::test]
 async fn test_permission_update_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1178,9 +1103,6 @@ async fn test_permission_update_success() {
 
 #[tokio::test]
 async fn test_permission_update_invalid_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1201,9 +1123,6 @@ async fn test_permission_update_invalid_id() {
 
 #[tokio::test]
 async fn test_permission_delete_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1247,9 +1166,6 @@ async fn test_permission_delete_success() {
 
 #[tokio::test]
 async fn test_permission_delete_invalid_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1272,9 +1188,6 @@ async fn test_permission_delete_invalid_id() {
 
 #[tokio::test]
 async fn test_role_permissions_assign_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1337,9 +1250,6 @@ async fn test_role_permissions_assign_success() {
 
 #[tokio::test]
 async fn test_role_permissions_assign_missing_token() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(
     b"POST /role-permissions HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"role_id\":1,\"permission_id\":1}",
     b"missing_token_header",
@@ -1348,9 +1258,6 @@ async fn test_role_permissions_assign_missing_token() {
 
 #[tokio::test]
 async fn test_role_permissions_list_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1420,9 +1327,6 @@ async fn test_role_permissions_list_success() {
 
 #[tokio::test]
 async fn test_role_permissions_list_invalid_role_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1443,9 +1347,6 @@ async fn test_role_permissions_list_invalid_role_id() {
 
 #[tokio::test]
 async fn test_role_permissions_remove_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1516,9 +1417,6 @@ async fn test_role_permissions_remove_success() {
 
 #[tokio::test]
 async fn test_role_permissions_remove_invalid_body() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1541,9 +1439,6 @@ async fn test_role_permissions_remove_invalid_body() {
 
 #[tokio::test]
 async fn test_service_roles_assign_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1603,9 +1498,6 @@ async fn test_service_roles_assign_success() {
 
 #[tokio::test]
 async fn test_service_roles_assign_missing_token() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(
     b"POST /service-roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
     b"missing_token_header",
@@ -1614,9 +1506,6 @@ async fn test_service_roles_assign_missing_token() {
 
 #[tokio::test]
 async fn test_service_roles_list_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1683,9 +1572,6 @@ async fn test_service_roles_list_success() {
 
 #[tokio::test]
 async fn test_service_roles_list_invalid_service_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1706,9 +1592,6 @@ async fn test_service_roles_list_invalid_service_id() {
 
 #[tokio::test]
 async fn test_service_roles_remove_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1776,9 +1659,6 @@ async fn test_service_roles_remove_success() {
 
 #[tokio::test]
 async fn test_service_roles_remove_invalid_body() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1801,9 +1681,6 @@ async fn test_service_roles_remove_invalid_body() {
 
 #[tokio::test]
 async fn test_person_service_roles_assign_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -1893,9 +1770,6 @@ async fn test_person_service_roles_assign_success() {
 
 #[tokio::test]
 async fn test_person_service_roles_assign_missing_token() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   run_test(
     b"POST /person-service-roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
     b"missing_token_header",
@@ -1904,9 +1778,6 @@ async fn test_person_service_roles_assign_missing_token() {
 
 #[tokio::test]
 async fn test_person_service_roles_remove_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -2000,9 +1871,6 @@ async fn test_person_service_roles_remove_success() {
 
 #[tokio::test]
 async fn test_person_service_roles_remove_invalid_body() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -2023,9 +1891,6 @@ async fn test_person_service_roles_remove_invalid_body() {
 
 #[tokio::test]
 async fn test_person_roles_in_service_list_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -2119,9 +1984,6 @@ async fn test_person_roles_in_service_list_success() {
 
 #[tokio::test]
 async fn test_person_roles_in_service_invalid_service_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -2166,9 +2028,6 @@ async fn test_person_roles_in_service_invalid_service_id() {
 
 #[tokio::test]
 async fn test_persons_with_role_in_service_list_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -2262,9 +2121,6 @@ async fn test_persons_with_role_in_service_list_success() {
 
 #[tokio::test]
 async fn test_persons_with_role_in_service_invalid_service_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -2304,9 +2160,6 @@ async fn test_persons_with_role_in_service_invalid_service_id() {
 
 #[tokio::test]
 async fn test_list_services_of_person_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -2399,9 +2252,6 @@ async fn test_list_services_of_person_success() {
 
 #[tokio::test]
 async fn test_list_services_of_person_invalid_id() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -2422,9 +2272,6 @@ async fn test_list_services_of_person_invalid_id() {
 
 #[tokio::test]
 async fn test_check_permission_success() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
@@ -2563,9 +2410,6 @@ async fn test_check_permission_success() {
 
 #[tokio::test]
 async fn test_check_permission_invalid_body() {
-  setup_test_server(|| create_test_server()).await;
-  sleep(Duration::from_millis(100)).await;
-
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
     b"\"token\"",
