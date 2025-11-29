@@ -28,12 +28,10 @@ Issues and validates access tokens for all other APIs.
 ## Coding & Commit Rules
 - Use **two-space indentation**, no tabs.
 - Keep route handlers small and grouped by resource.
-- Use `serde::Serialize` for DTOs.
-- Use imperative commit prefixes: `feat:`, `fix:`, `refactor:`, `docs:`.
-- Include SQL or curl samples in PRs that change endpoints.
-- Updates on db structure must be done in original db code, no migrations yet. None should be need by now.
-- Avoid adding dependencies.
-- Keep processes minimal.
+- Use imperative commit prefixes: `feat:`, `fix:`, `refactor:`, `docs:`. May there be more than one in a single commit.
+- Commit messages must include a prefix (feat/fix/refactor/docs) plus minimal bullet-like summaries of the main changes on subsequent lines. bullets must be plus signs "+ ".
+- Avoid adding dependencies when possible.
+- Apply KISS practices.
 
 ## Security Checklist
 - Never commit `.env` or credentials.
