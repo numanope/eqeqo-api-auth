@@ -95,10 +95,10 @@ async fn require_token(
   }
 }
 
-pub(super) async fn require_token_without_renew(
+pub(super) async fn require_token_with_renew(
   req: &Request,
 ) -> Result<(DB, TokenValidation, String), Response> {
-  require_token(req, false).await
+  require_token(req, true).await
 }
 
 pub(super) async fn get_db_connection() -> Result<DB, Response> {

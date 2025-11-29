@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{
-  error_response, get_db_connection, log_access, require_token_without_renew,
+  error_response, get_db_connection, log_access, require_token_with_renew,
   unauthorized_response, with_auth, with_auth_no_renew,
 };
 
@@ -163,7 +163,7 @@ pub struct CreateUserPayload {
 }
 
 pub async fn create_user(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -202,7 +202,7 @@ pub async fn create_user(req: &Request) -> Response {
 }
 
 pub async fn list_people(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -220,7 +220,7 @@ pub async fn list_people(req: &Request) -> Response {
 }
 
 pub async fn get_user(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -251,7 +251,7 @@ pub struct UpdateUserPayload {
 }
 
 pub async fn update_user(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -281,7 +281,7 @@ pub async fn update_user(req: &Request) -> Response {
 }
 
 pub async fn delete_user(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };

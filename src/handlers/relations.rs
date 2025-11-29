@@ -5,7 +5,7 @@ use serde_json::json;
 use super::roles::Role;
 use super::users::User;
 use super::{
-  FlexibleId, error_response, require_token_without_renew, resolve_person_id, resolve_service_id,
+  FlexibleId, error_response, require_token_with_renew, resolve_person_id, resolve_service_id,
 };
 
 #[derive(Deserialize)]
@@ -15,7 +15,7 @@ pub struct ServiceRolePayload {
 }
 
 pub async fn assign_role_to_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -46,7 +46,7 @@ pub async fn assign_role_to_service(req: &Request) -> Response {
 }
 
 pub async fn remove_role_from_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -79,7 +79,7 @@ pub async fn remove_role_from_service(req: &Request) -> Response {
 }
 
 pub async fn list_service_roles(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -113,7 +113,7 @@ pub struct PersonServiceRolePayload {
 }
 
 pub async fn assign_role_to_person_in_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -146,7 +146,7 @@ pub async fn assign_role_to_person_in_service(req: &Request) -> Response {
 }
 
 pub async fn remove_role_from_person_in_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -181,7 +181,7 @@ pub async fn remove_role_from_person_in_service(req: &Request) -> Response {
 }
 
 pub async fn list_person_roles_in_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -217,7 +217,7 @@ pub async fn list_person_roles_in_service(req: &Request) -> Response {
 }
 
 pub async fn list_persons_with_role_in_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -292,7 +292,7 @@ fn parse_check_permission_payload(req: &Request) -> Result<CheckPermissionPayloa
 }
 
 pub async fn check_person_permission_in_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };

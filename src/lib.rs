@@ -1,51 +1,16 @@
-use httpageboy::{Rt, Server, handler};
-use tokio::time::Duration;
+use crate::handlers::*;
 pub mod auth;
 mod database;
 mod handlers;
-use crate::handlers::*;
+pub use httpageboy::{
+  Request, Response, Rt, Server, StatusCode, handler,
+  test_utils::{run_test, setup_test_server},
+};
 
-async fn token_cleanup_loop(config: auth::TokenConfig) {
-  let interval_seconds = if config.ttl_seconds > 0 {
-    (config.ttl_seconds / 2).max(30)
-  } else {
-    30
-  } as u64;
-
-  loop {
-    match database::DB::new().await {
-      Ok(db) => {
-        let manager = auth::TokenManager::new(db.pool());
-        match manager.cleanup_expired().await {
-          Ok(removed) => {
-            if removed > 0 {
-              println!("[cleanup] removed {} expired tokens", removed);
-            }
-          }
-          Err(err) => {
-            eprintln!("[cleanup-error] {}", err);
-          }
-        }
-      }
-      Err(err) => {
-        eprintln!("[cleanup-db-error] {}", err);
-      }
-    }
-    tokio::time::sleep(Duration::from_secs(interval_seconds)).await;
-  }
-}
-
-fn spawn_token_cleanup_job() {
-  let config = auth::TokenConfig::load();
-  tokio::spawn(token_cleanup_loop(config));
-}
-
-pub async fn auth_server(url: &str, _threads_number: u8) -> Server {
+pub async fn create_server(url: &str) -> Server {
   let mut server = Server::new(url, None)
     .await
     .expect("Failed to create server");
-
-  spawn_token_cleanup_job();
 
   server.add_route("/", Rt::GET, handler!(home));
 

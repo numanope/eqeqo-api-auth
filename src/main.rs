@@ -1,4 +1,4 @@
-use auth_api::auth_server;
+use auth_api::create_server;
 
 #[tokio::main]
 async fn main() {
@@ -14,11 +14,9 @@ async fn main() {
         url
       }
     })
-    .or_else(|_| {
-      std::env::var("SERVER_PORT").map(|port| format!("127.0.0.1:{}", port))
-    })
+    .or_else(|_| std::env::var("SERVER_PORT").map(|port| format!("127.0.0.1:{}", port)))
     .unwrap_or_else(|_| "127.0.0.1:7878".to_string());
 
-  let server = auth_server(&server_url, 10).await;
+  let server = create_server(&server_url).await;
   server.run().await;
 }

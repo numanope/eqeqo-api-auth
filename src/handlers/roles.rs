@@ -2,7 +2,7 @@ use httpageboy::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use super::{error_response, require_token_without_renew};
+use super::{error_response, require_token_with_renew};
 
 #[derive(Serialize, sqlx::FromRow)]
 pub struct Role {
@@ -16,7 +16,7 @@ pub struct CreateRolePayload {
 }
 
 pub async fn create_role(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -39,7 +39,7 @@ pub async fn create_role(req: &Request) -> Response {
 }
 
 pub async fn list_roles(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -57,7 +57,7 @@ pub async fn list_roles(req: &Request) -> Response {
 }
 
 pub async fn get_role(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -86,7 +86,7 @@ pub struct UpdateRolePayload {
 }
 
 pub async fn update_role(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -117,7 +117,7 @@ pub async fn update_role(req: &Request) -> Response {
 }
 
 pub async fn delete_role(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };

@@ -2,7 +2,7 @@ use httpageboy::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use super::{error_response, require_token_without_renew};
+use super::{error_response, require_token_with_renew};
 
 #[derive(Serialize, sqlx::FromRow)]
 pub struct Service {
@@ -18,7 +18,7 @@ pub struct CreateServicePayload {
 }
 
 pub async fn create_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -42,7 +42,7 @@ pub async fn create_service(req: &Request) -> Response {
 }
 
 pub async fn list_services(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -66,7 +66,7 @@ pub struct UpdateServicePayload {
 }
 
 pub async fn update_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -95,7 +95,7 @@ pub async fn update_service(req: &Request) -> Response {
 }
 
 pub async fn delete_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
@@ -120,7 +120,7 @@ pub async fn delete_service(req: &Request) -> Response {
 }
 
 pub async fn list_services_of_person(req: &Request) -> Response {
-  let (db, _, _) = match require_token_without_renew(req).await {
+  let (db, _, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };

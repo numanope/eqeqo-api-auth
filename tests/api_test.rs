@@ -1,336 +1,22 @@
-use auth_api::auth_server;
-use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::sync::OnceLock;
-use std::thread;
-use std::time::Duration;
-use tokio::runtime::Runtime;
+use auth_api::{Server, create_server};
 
-fn normalize_url(url: String) -> String {
-  if let Some(stripped) = url.strip_prefix("http://") {
-    stripped.to_string()
-  } else if let Some(stripped) = url.strip_prefix("https://") {
-    stripped.to_string()
-  } else {
-    url
-  }
+async fn server_definition() -> Server {
+  let server_url = "127.0.0.1:38080";
+  create_server(server_url).await
 }
 
-fn server_url() -> String {
-  static URL: OnceLock<String> = OnceLock::new();
-  URL
-    .get_or_init(|| {
-      let _ = dotenvy::dotenv();
-      if let Ok(url) = std::env::var("SERVER_URL") {
-        normalize_url(url)
-      } else if let Ok(url) = std::env::var("TEST_SERVER_URL") {
-        normalize_url(url)
-      } else if let Ok(port) = std::env::var("SERVER_PORT") {
-        format!("127.0.0.1:{}", port)
-      } else {
-        "127.0.0.1:7878".to_string()
-      }
-    })
-    .clone()
+/*
+REFERENCIA DE SINTAXIS DE TEST
+
+#[tokio::test]
+async fn demo_test_name() {
+  // You can add some minor logic here only if it's estrictly necessary.
+  setup_test_server(|| create_test_server()).await; // no changes
+  let request = b"GET / HTTP/1.1\r\n\r\n"; // the request
+  let expected = b"home"; // the expected answer
+  run_test(request, expected); // no changes
 }
-
-async fn ensure_service(pool: &Pool<Postgres>, name: &str, description: &str) -> Result<i32, sqlx::Error> {
-  if let Some(id) = sqlx::query_scalar::<_, i32>(
-    "INSERT INTO auth.services (name, description) VALUES ($1, $2)
-      ON CONFLICT (name) DO NOTHING
-      RETURNING id",
-  )
-  .bind(name)
-  .bind(description)
-  .fetch_optional(pool)
-  .await?
-  {
-    return Ok(id);
-  }
-  sqlx::query_scalar::<_, i32>("SELECT id FROM auth.services WHERE name = $1")
-    .bind(name)
-    .fetch_one(pool)
-    .await
-}
-
-async fn ensure_role(pool: &Pool<Postgres>, name: &str) -> Result<i32, sqlx::Error> {
-  if let Some(id) = sqlx::query_scalar::<_, i32>(
-    "INSERT INTO auth.role (name) VALUES ($1)
-      ON CONFLICT (name) DO NOTHING
-      RETURNING id",
-  )
-  .bind(name)
-  .fetch_optional(pool)
-  .await?
-  {
-    return Ok(id);
-  }
-  sqlx::query_scalar::<_, i32>("SELECT id FROM auth.role WHERE name = $1")
-    .bind(name)
-    .fetch_one(pool)
-    .await
-}
-
-async fn ensure_permission(pool: &Pool<Postgres>, name: &str) -> Result<i32, sqlx::Error> {
-  if let Some(id) = sqlx::query_scalar::<_, i32>(
-    "INSERT INTO auth.permission (name) VALUES ($1)
-      ON CONFLICT (name) DO NOTHING
-      RETURNING id",
-  )
-  .bind(name)
-  .fetch_optional(pool)
-  .await?
-  {
-    return Ok(id);
-  }
-  sqlx::query_scalar::<_, i32>("SELECT id FROM auth.permission WHERE name = $1")
-    .bind(name)
-    .fetch_one(pool)
-    .await
-}
-
-async fn ensure_person(
-  pool: &Pool<Postgres>,
-  username: &str,
-  password_hash: &str,
-  name: &str,
-  person_type: &str,
-  document_type: &str,
-  document_number: &str,
-) -> Result<i32, sqlx::Error> {
-  if let Some(id) = sqlx::query_scalar::<_, i32>(
-    "INSERT INTO auth.person (username, password_hash, name, person_type, document_type, document_number)
-      VALUES ($1, $2, $3, $4::auth.person_type, $5::auth.document_type, $6)
-      ON CONFLICT (username) DO UPDATE SET removed_at = NULL
-      RETURNING id",
-  )
-  .bind(username)
-  .bind(password_hash)
-  .bind(name)
-  .bind(person_type)
-  .bind(document_type)
-  .bind(document_number)
-  .fetch_optional(pool)
-  .await?
-  {
-    return Ok(id);
-  }
-  sqlx::query_scalar::<_, i32>("SELECT id FROM auth.person WHERE username = $1")
-    .bind(username)
-    .fetch_one(pool)
-    .await
-}
-
-async fn ensure_service_role(pool: &Pool<Postgres>, service_id: i32, role_id: i32) -> Result<(), sqlx::Error> {
-  sqlx::query(
-    "INSERT INTO auth.service_roles (service_id, role_id) VALUES ($1, $2)
-      ON CONFLICT (service_id, role_id) DO NOTHING",
-  )
-  .bind(service_id)
-  .bind(role_id)
-  .execute(pool)
-  .await?;
-  Ok(())
-}
-
-async fn ensure_role_permission(pool: &Pool<Postgres>, role_id: i32, permission_id: i32) -> Result<(), sqlx::Error> {
-  sqlx::query(
-    "INSERT INTO auth.role_permission (role_id, permission_id) VALUES ($1, $2)
-      ON CONFLICT (role_id, permission_id) DO NOTHING",
-  )
-  .bind(role_id)
-  .bind(permission_id)
-  .execute(pool)
-  .await?;
-  Ok(())
-}
-
-async fn ensure_person_service_role(
-  pool: &Pool<Postgres>,
-  person_id: i32,
-  service_id: i32,
-  role_id: i32,
-) -> Result<(), sqlx::Error> {
-  sqlx::query(
-    "INSERT INTO auth.person_service_role (person_id, service_id, role_id) VALUES ($1, $2, $3)
-      ON CONFLICT (person_id, service_id, role_id) DO NOTHING",
-  )
-  .bind(person_id)
-  .bind(service_id)
-  .bind(role_id)
-  .execute(pool)
-  .await?;
-  Ok(())
-}
-
-async fn seed_demo_data(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
-  let service_a = ensure_service(pool, "Service A", "Demo catalog service").await?;
-  let service_b = ensure_service(pool, "Service B", "Internal billing service").await?;
-  let service_c = ensure_service(pool, "Service C", "Customer support portal").await?;
-
-  let role_admin = ensure_role(pool, "Admin").await?;
-  let role_user = ensure_role(pool, "User").await?;
-  let role_editor = ensure_role(pool, "Editor").await?;
-  let _role_viewer = ensure_role(pool, "Viewer").await?;
-
-  let perm_read = ensure_permission(pool, "read").await?;
-  let perm_write = ensure_permission(pool, "write").await?;
-  let perm_update = ensure_permission(pool, "update").await?;
-  let perm_delete = ensure_permission(pool, "delete").await?;
-  let _perm_share = ensure_permission(pool, "share").await?;
-
-  let person_adm1 = ensure_person(
-    pool,
-    "adm1",
-    "adm1-hash",
-    "Admin One",
-    "N",
-    "DNI",
-    "00000001",
-  )
-  .await?;
-  let person_usr1 = ensure_person(
-    pool,
-    "usr1",
-    "usr1-hash",
-    "User One",
-    "N",
-    "DNI",
-    "00000002",
-  )
-  .await?;
-  let person_usr2 = ensure_person(
-    pool,
-    "usr2",
-    "usr2-hash",
-    "User Two",
-    "N",
-    "DNI",
-    "00000003",
-  )
-  .await?;
-  let person_usr3 = ensure_person(
-    pool,
-    "usr3",
-    "usr3-hash",
-    "User Three",
-    "N",
-    "DNI",
-    "00000004",
-  )
-  .await?;
-
-  ensure_service_role(pool, service_a, role_admin).await?;
-  ensure_service_role(pool, service_a, role_user).await?;
-  ensure_service_role(pool, service_b, role_user).await?;
-  ensure_service_role(pool, service_c, role_editor).await?;
-
-  ensure_role_permission(pool, role_admin, perm_read).await?;
-  ensure_role_permission(pool, role_admin, perm_write).await?;
-  ensure_role_permission(pool, role_admin, perm_update).await?;
-  ensure_role_permission(pool, role_admin, perm_delete).await?;
-  ensure_role_permission(pool, role_user, perm_read).await?;
-  ensure_role_permission(pool, role_editor, perm_update).await?;
-  ensure_role_permission(pool, role_editor, perm_read).await?;
-
-  ensure_person_service_role(pool, person_adm1, service_a, role_admin).await?;
-  ensure_person_service_role(pool, person_usr1, service_a, role_user).await?;
-  ensure_person_service_role(pool, person_usr2, service_b, role_user).await?;
-  ensure_person_service_role(pool, person_usr3, service_c, role_editor).await?;
-
-  Ok(())
-}
-
-fn prepare_database() {
-  static SEEDED: OnceLock<()> = OnceLock::new();
-  SEEDED.get_or_init(|| {
-    let _ = dotenvy::dotenv();
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for tests");
-    let handle = thread::spawn(move || {
-      let runtime = Runtime::new().expect("failed to create runtime");
-      runtime.block_on(async {
-        let pool = PgPoolOptions::new()
-          .max_connections(5)
-          .connect(&database_url)
-          .await
-          .expect("failed to connect to database for tests");
-        seed_demo_data(&pool)
-          .await
-          .expect("failed to seed baseline auth data");
-      });
-    });
-    handle.join().expect("db seed thread panicked");
-  });
-}
-
-fn wait_for_server(url: &str) {
-  for _ in 0..50 {
-    if TcpStream::connect(url).is_ok() {
-      return;
-    }
-    thread::sleep(Duration::from_millis(100));
-  }
-  panic!("Server did not start at {}", url);
-}
-
-fn start_server() {
-  static STARTED: OnceLock<()> = OnceLock::new();
-  STARTED.get_or_init(|| {
-    prepare_database();
-    let url = server_url();
-    let listen_addr = url.clone();
-    thread::spawn(move || {
-      let runtime = Runtime::new().expect("failed to create runtime");
-      runtime.block_on(async move {
-        let server = auth_server(&listen_addr, 4).await;
-        server.run().await;
-      });
-    });
-    wait_for_server(&url);
-  });
-}
-
-fn ensure_content_length(request: &[u8]) -> Vec<u8> {
-  let request_string = String::from_utf8_lossy(request);
-  if let Some(split) = request_string.find("\r\n\r\n") {
-    let (headers, body) = request_string.split_at(split);
-    let body = &body[4..];
-    if !body.is_empty() && !headers.to_lowercase().contains("content-length:") {
-      let mut normalized = String::new();
-      normalized.push_str(headers);
-      normalized.push_str(&format!("\r\nContent-Length: {}\r\n\r\n{}", body.len(), body));
-      return normalized.into_bytes();
-    }
-  }
-  request.to_vec()
-}
-
-fn run_test(request: &[u8], expected_response: &[u8]) -> String {
-  start_server();
-  let normalized_request = ensure_content_length(request);
-  let server_url = server_url();
-  let mut stream = TcpStream::connect(server_url).expect("Failed to connect to server");
-
-  stream.write_all(&normalized_request).unwrap();
-  stream.shutdown(std::net::Shutdown::Write).unwrap();
-
-  let mut buffer = Vec::new();
-  stream.read_to_end(&mut buffer).unwrap();
-
-  let buffer_string = String::from_utf8_lossy(&buffer).to_string();
-  let expected_response_string = String::from_utf8_lossy(expected_response).to_string();
-
-  assert!(
-    buffer_string.contains(&expected_response_string),
-    "ASSERT FAILED:\n\nRECEIVED: {} \nEXPECTED: {} \n\n",
-    buffer_string,
-    expected_response_string
-  );
-  buffer_string
-}
-
-// Authentication
+*/
 
 #[tokio::test]
 async fn test_login_success() {
@@ -423,6 +109,14 @@ async fn test_check_token_invalid_token() {
   );
 }
 
+#[tokio::test]
+async fn test_check_token_missing_header() {
+  run_test(
+    b"POST /check-token HTTP/1.1\r\n\r\n",
+    b"missing_token_header",
+  );
+}
+
 // Users
 
 #[tokio::test]
@@ -480,6 +174,14 @@ async fn test_user_create_success() {
   );
   let expected_username = format!("\"username\":\"{}\"", username);
   run_test(create_request.as_bytes(), expected_username.as_bytes());
+}
+
+#[tokio::test]
+async fn test_user_create_missing_token() {
+  run_test(
+    b"POST /users HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"missing_token\",\"password_hash\":\"secret\",\"name\":\"No Auth\",\"person_type\":\"N\",\"document_type\":\"DNI\",\"document_number\":\"123\"}",
+    b"missing_token_header",
+  );
 }
 
 #[tokio::test]
@@ -553,6 +255,14 @@ async fn test_user_update_success() {
 }
 
 #[tokio::test]
+async fn test_user_update_missing_token() {
+  run_test(
+    b"PUT /users/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"Nope\"}",
+    b"missing_token_header",
+  );
+}
+
+#[tokio::test]
 async fn test_user_update_invalid_id() {
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
@@ -618,6 +328,11 @@ async fn test_user_delete_success() {
     token = token
   );
   run_test(delete_request.as_bytes(), b"\"status\":\"user_deleted\"");
+}
+
+#[tokio::test]
+async fn test_user_delete_missing_token() {
+  run_test(b"DELETE /users/1 HTTP/1.1\r\n\r\n", b"missing_token_header");
 }
 
 #[tokio::test]
@@ -687,6 +402,11 @@ async fn test_user_get_success() {
   );
   let expected_username = format!("\"username\":\"{}\"", username);
   run_test(get_request.as_bytes(), expected_username.as_bytes());
+}
+
+#[tokio::test]
+async fn test_user_get_missing_token() {
+  run_test(b"GET /users/1 HTTP/1.1\r\n\r\n", b"missing_token_header");
 }
 
 #[tokio::test]
@@ -800,6 +520,14 @@ async fn test_service_create_success() {
 }
 
 #[tokio::test]
+async fn test_service_create_missing_token() {
+  run_test(
+    b"POST /services HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"svc_missing\",\"description\":null}",
+    b"missing_token_header",
+  );
+}
+
+#[tokio::test]
 async fn test_service_create_invalid_body() {
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
@@ -860,6 +588,14 @@ async fn test_service_update_success() {
 }
 
 #[tokio::test]
+async fn test_service_update_missing_token() {
+  run_test(
+    b"PUT /services/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
+    b"missing_token_header",
+  );
+}
+
+#[tokio::test]
 async fn test_service_update_invalid_id() {
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
@@ -917,6 +653,14 @@ async fn test_service_delete_success() {
     token = token
   );
   run_test(delete_request.as_bytes(), b"\"status\":\"service_deleted\"");
+}
+
+#[tokio::test]
+async fn test_service_delete_missing_token() {
+  run_test(
+    b"DELETE /services/1 HTTP/1.1\r\n\r\n",
+    b"missing_token_header",
+  );
 }
 
 #[tokio::test]
@@ -1078,6 +822,14 @@ async fn test_role_create_success() {
 }
 
 #[tokio::test]
+async fn test_role_create_missing_token() {
+  run_test(
+    b"POST /roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"missing_role\"}",
+    b"missing_token_header",
+  );
+}
+
+#[tokio::test]
 async fn test_role_create_invalid_body() {
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
@@ -1140,6 +892,14 @@ async fn test_role_update_success() {
 }
 
 #[tokio::test]
+async fn test_role_update_missing_token() {
+  run_test(
+    b"PUT /roles/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"none\"}",
+    b"missing_token_header",
+  );
+}
+
+#[tokio::test]
 async fn test_role_update_invalid_id() {
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
@@ -1197,6 +957,11 @@ async fn test_role_delete_success() {
     token = token
   );
   run_test(delete_request.as_bytes(), b"\"status\":\"role_deleted\"");
+}
+
+#[tokio::test]
+async fn test_role_delete_missing_token() {
+  run_test(b"DELETE /roles/1 HTTP/1.1\r\n\r\n", b"missing_token_header");
 }
 
 #[tokio::test]
@@ -1271,6 +1036,14 @@ async fn test_permission_create_success() {
 }
 
 #[tokio::test]
+async fn test_permission_create_missing_token() {
+  run_test(
+    b"POST /permissions HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"perm_missing\"}",
+    b"missing_token_header",
+  );
+}
+
+#[tokio::test]
 async fn test_permission_create_invalid_body() {
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
@@ -1333,6 +1106,14 @@ async fn test_permission_update_success() {
 }
 
 #[tokio::test]
+async fn test_permission_update_missing_token() {
+  run_test(
+    b"PUT /permissions/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"none\"}",
+    b"missing_token_header",
+  );
+}
+
+#[tokio::test]
 async fn test_permission_update_invalid_id() {
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
@@ -1392,6 +1173,14 @@ async fn test_permission_delete_success() {
   run_test(
     delete_request.as_bytes(),
     b"\"status\":\"permission_deleted\"",
+  );
+}
+
+#[tokio::test]
+async fn test_permission_delete_missing_token() {
+  run_test(
+    b"DELETE /permissions/1 HTTP/1.1\r\n\r\n",
+    b"missing_token_header",
   );
 }
 
@@ -1554,6 +1343,14 @@ async fn test_role_permissions_list_success() {
   );
   let expected = format!("\"name\":\"{}\"", permission_name);
   run_test(list_request.as_bytes(), expected.as_bytes());
+}
+
+#[tokio::test]
+async fn test_role_permissions_list_missing_token() {
+  run_test(
+    b"GET /roles/1/permissions HTTP/1.1\r\n\r\n",
+    b"missing_token_header",
+  );
 }
 
 #[tokio::test]
@@ -1799,6 +1596,14 @@ async fn test_service_roles_list_success() {
   );
   let expected = format!("\"name\":\"{}\"", role_name);
   run_test(list_request.as_bytes(), expected.as_bytes());
+}
+
+#[tokio::test]
+async fn test_service_roles_list_missing_token() {
+  run_test(
+    b"GET /services/1/roles HTTP/1.1\r\n\r\n",
+    b"missing_token_header",
+  );
 }
 
 #[tokio::test]
@@ -2214,6 +2019,14 @@ async fn test_person_roles_in_service_list_success() {
 }
 
 #[tokio::test]
+async fn test_person_roles_in_service_missing_token() {
+  run_test(
+    b"GET /people/1/services/1/roles HTTP/1.1\r\n\r\n",
+    b"missing_token_header",
+  );
+}
+
+#[tokio::test]
 async fn test_person_roles_in_service_invalid_service_id() {
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
@@ -2351,6 +2164,14 @@ async fn test_persons_with_role_in_service_list_success() {
 }
 
 #[tokio::test]
+async fn test_persons_with_role_in_service_missing_token() {
+  run_test(
+    b"GET /services/1/roles/1/people HTTP/1.1\r\n\r\n",
+    b"missing_token_header",
+  );
+}
+
+#[tokio::test]
 async fn test_persons_with_role_in_service_invalid_service_id() {
   let login_response = run_test(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
@@ -2479,6 +2300,14 @@ async fn test_list_services_of_person_success() {
   );
   let expected = format!("\"name\":\"{}\"", service_name);
   run_test(list_request.as_bytes(), expected.as_bytes());
+}
+
+#[tokio::test]
+async fn test_list_services_of_person_missing_token() {
+  run_test(
+    b"GET /people/1/services HTTP/1.1\r\n\r\n",
+    b"missing_token_header",
+  );
 }
 
 #[tokio::test]
@@ -2637,6 +2466,14 @@ async fn test_check_permission_success() {
     check_body
   );
   run_test(check_request.as_bytes(), b"\"has_permission\":true");
+}
+
+#[tokio::test]
+async fn test_check_permission_missing_token() {
+  run_test(
+    b"GET /check-permission HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"person_id\":1,\"service_id\":1,\"permission_name\":\"any\"}",
+    b"missing_token_header",
+  );
 }
 
 #[tokio::test]
