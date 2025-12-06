@@ -1,47 +1,9 @@
 use auth_api::test_utils::{run_test as raw_run_test, setup_test_server};
 use auth_api::{active_test_server_url, create_server};
 
-fn prepare_request(original: &[u8]) -> Vec<u8> {
-  let text = String::from_utf8_lossy(original);
-  let parts: Vec<&str> = text.splitn(2, "\r\n\r\n").collect();
-  if parts.len() != 2 {
-    return original.to_vec();
-  }
-  let mut headers: Vec<String> = parts[0].split("\r\n").map(|h| h.to_string()).collect();
-  let body = parts[1];
-  let mut has_host = false;
-  let mut has_connection = false;
-  let mut has_content_length = false;
-
-  for h in &headers {
-    let lower = h.to_ascii_lowercase();
-    if lower.starts_with("host:") {
-      has_host = true;
-    } else if lower.starts_with("connection:") {
-      has_connection = true;
-    } else if lower.starts_with("content-length:") {
-      has_content_length = true;
-    }
-  }
-
-  if !has_host {
-    headers.push("Host: localhost".to_string());
-  }
-  if !has_connection {
-    headers.push("Connection: close".to_string());
-  }
-  if !has_content_length && !body.is_empty() {
-    headers.push(format!("Content-Length: {}", body.len()));
-  }
-
-  let rebuilt = format!("{}\r\n\r\n{}", headers.join("\r\n"), body);
-  rebuilt.into_bytes()
-}
-
 async fn run_test(request: &[u8], expected_response: &[u8]) -> String {
   setup_test_server(|| async { create_server(active_test_server_url()).await }).await;
-  let prepared = prepare_request(request);
-  raw_run_test(&prepared, expected_response, Some(active_test_server_url())).await
+  raw_run_test(request, expected_response, Some(active_test_server_url())).await
 }
 
 /*
