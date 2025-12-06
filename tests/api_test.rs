@@ -7,7 +7,7 @@ async fn server_factory() -> auth_api::Server {
 
 async fn run_test(request: &[u8], expected_response: &[u8]) -> String {
   setup_test_server(|| server_factory()).await;
-  raw_run_test(request, expected_response)
+  raw_run_test(request, expected_response, Some(active_test_server_url())).await
 }
 
 /*

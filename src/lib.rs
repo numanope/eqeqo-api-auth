@@ -9,7 +9,7 @@ pub mod test_utils {
 }
 
 pub fn active_test_server_url() -> &'static str {
-  httpageboy::test_utils::active_server_url()
+  httpageboy::test_utils::active_test_server_url()
 }
 
 pub async fn create_server(server_url: &str) -> Server {
