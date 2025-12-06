@@ -5,12 +5,7 @@ mod handlers;
 pub use httpageboy::{Request, Response, Rt, Server, StatusCode, handler};
 
 pub mod test_utils {
-  pub use httpageboy::test_utils::{
-    active_test_server_url,
-    run_test,
-    setup_test_server,
-    setup_test_server_with_url,
-  };
+  pub use httpageboy::test_utils::{run_test, setup_test_server};
 }
 
 pub fn active_test_server_url() -> &'static str {

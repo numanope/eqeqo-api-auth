@@ -1,10 +1,5 @@
-use auth_api::test_utils::{
-  run_test as raw_run_test, setup_test_server_with_url,
-};
-use auth_api::create_server;
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-static NEXT_PORT: AtomicUsize = AtomicUsize::new(50_000);
+use auth_api::test_utils::{run_test as raw_run_test, setup_test_server};
+use auth_api::{active_test_server_url, create_server};
 
 fn prepare_request(original: &[u8]) -> Vec<u8> {
   let text = String::from_utf8_lossy(original);
@@ -44,12 +39,9 @@ fn prepare_request(original: &[u8]) -> Vec<u8> {
 }
 
 async fn run_test(request: &[u8], expected_response: &[u8]) -> String {
-  let port = NEXT_PORT.fetch_add(1, Ordering::Relaxed) + 1;
-  let server_url = format!("127.0.0.1:{}", port);
-  let leaked_url: &'static str = Box::leak(server_url.into_boxed_str());
-  setup_test_server_with_url(leaked_url, move || async move { create_server(leaked_url).await }).await;
+  setup_test_server(|| async { create_server(active_test_server_url()).await }).await;
   let prepared = prepare_request(request);
-  raw_run_test(&prepared, expected_response, Some(leaked_url)).await
+  raw_run_test(&prepared, expected_response, Some(active_test_server_url())).await
 }
 
 /*
