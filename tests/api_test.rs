@@ -1,13 +1,96 @@
-use auth_api::test_utils::{run_test as raw_run_test, setup_test_server};
 use auth_api::{active_test_server_url, create_server};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::time::{Duration, Instant};
 
-async fn server_factory() -> auth_api::Server {
-  create_server(active_test_server_url()).await
+fn prepare_request(original: &[u8]) -> Vec<u8> {
+  let text = String::from_utf8_lossy(original);
+  let parts: Vec<&str> = text.splitn(2, "\r\n\r\n").collect();
+  if parts.len() != 2 {
+    return original.to_vec();
+  }
+  let mut headers: Vec<String> = parts[0].split("\r\n").map(|h| h.to_string()).collect();
+  let body = parts[1];
+  let mut has_host = false;
+  let mut has_connection = false;
+  let mut has_content_length = false;
+
+  for h in &headers {
+    let lower = h.to_ascii_lowercase();
+    if lower.starts_with("host:") {
+      has_host = true;
+    } else if lower.starts_with("connection:") {
+      has_connection = true;
+    } else if lower.starts_with("content-length:") {
+      has_content_length = true;
+    }
+  }
+
+  if !has_host {
+    headers.push("Host: localhost".to_string());
+  }
+  if !has_connection {
+    headers.push("Connection: close".to_string());
+  }
+  if !has_content_length && !body.is_empty() {
+    headers.push(format!("Content-Length: {}", body.len()));
+  }
+
+  let rebuilt = format!("{}\r\n\r\n{}", headers.join("\r\n"), body);
+  rebuilt.into_bytes()
 }
 
 async fn run_test(request: &[u8], expected_response: &[u8]) -> String {
-  setup_test_server(|| server_factory()).await;
-  raw_run_test(request, expected_response, Some(active_test_server_url())).await
+  let server_url = active_test_server_url().to_string();
+  let server_url_clone = server_url.clone();
+  httpageboy::test_utils::setup_test_server_with_url(&server_url, || async move {
+    create_server(&server_url_clone).await
+  })
+  .await;
+  let prepared = prepare_request(request);
+  let mut stream = TcpStream::connect(&server_url)
+    .await
+    .expect("failed to connect to test server");
+  stream
+    .write_all(&prepared)
+    .await
+    .expect("failed to write request to test server");
+  let _ = stream.shutdown().await;
+
+  let deadline = Instant::now() + Duration::from_secs(5);
+  let mut buffer = Vec::new();
+  let mut chunk = [0u8; 1024];
+  while Instant::now() < deadline {
+    tokio::select! {
+      read = stream.read(&mut chunk) => {
+        match read {
+          Ok(0) => break,
+          Ok(n) => {
+            buffer.extend_from_slice(&chunk[..n]);
+            if buffer.windows(expected_response.len()).any(|w| w == expected_response) {
+              break;
+            }
+          }
+          Err(err) => panic!("failed to read response: {}", err),
+        }
+      }
+      _ = tokio::time::sleep(Duration::from_millis(50)) => {
+        if buffer.windows(expected_response.len()).any(|w| w == expected_response) {
+          break;
+        }
+      }
+    }
+  }
+
+  let buffer_string = String::from_utf8_lossy(&buffer).to_string();
+  let expected_str = String::from_utf8_lossy(expected_response);
+  assert!(
+    buffer_string.contains(expected_str.as_ref()),
+    "ASSERT FAILED:\n\nRECEIVED: {} \nEXPECTED: {} \n\n",
+    buffer_string,
+    expected_str
+  );
+  buffer_string
 }
 
 /*
