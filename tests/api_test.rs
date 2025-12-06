@@ -1,7 +1,10 @@
-use auth_api::{active_test_server_url, create_server};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
-use tokio::time::{Duration, Instant};
+use auth_api::test_utils::{
+  run_test as raw_run_test, setup_test_server_with_url,
+};
+use auth_api::create_server;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static NEXT_PORT: AtomicUsize = AtomicUsize::new(50_000);
 
 fn prepare_request(original: &[u8]) -> Vec<u8> {
   let text = String::from_utf8_lossy(original);
@@ -41,56 +44,12 @@ fn prepare_request(original: &[u8]) -> Vec<u8> {
 }
 
 async fn run_test(request: &[u8], expected_response: &[u8]) -> String {
-  let server_url = active_test_server_url().to_string();
-  let server_url_clone = server_url.clone();
-  httpageboy::test_utils::setup_test_server_with_url(&server_url, || async move {
-    create_server(&server_url_clone).await
-  })
-  .await;
+  let port = NEXT_PORT.fetch_add(1, Ordering::Relaxed) + 1;
+  let server_url = format!("127.0.0.1:{}", port);
+  let leaked_url: &'static str = Box::leak(server_url.into_boxed_str());
+  setup_test_server_with_url(leaked_url, move || async move { create_server(leaked_url).await }).await;
   let prepared = prepare_request(request);
-  let mut stream = TcpStream::connect(&server_url)
-    .await
-    .expect("failed to connect to test server");
-  stream
-    .write_all(&prepared)
-    .await
-    .expect("failed to write request to test server");
-  let _ = stream.shutdown().await;
-
-  let deadline = Instant::now() + Duration::from_secs(5);
-  let mut buffer = Vec::new();
-  let mut chunk = [0u8; 1024];
-  while Instant::now() < deadline {
-    tokio::select! {
-      read = stream.read(&mut chunk) => {
-        match read {
-          Ok(0) => break,
-          Ok(n) => {
-            buffer.extend_from_slice(&chunk[..n]);
-            if buffer.windows(expected_response.len()).any(|w| w == expected_response) {
-              break;
-            }
-          }
-          Err(err) => panic!("failed to read response: {}", err),
-        }
-      }
-      _ = tokio::time::sleep(Duration::from_millis(50)) => {
-        if buffer.windows(expected_response.len()).any(|w| w == expected_response) {
-          break;
-        }
-      }
-    }
-  }
-
-  let buffer_string = String::from_utf8_lossy(&buffer).to_string();
-  let expected_str = String::from_utf8_lossy(expected_response);
-  assert!(
-    buffer_string.contains(expected_str.as_ref()),
-    "ASSERT FAILED:\n\nRECEIVED: {} \nEXPECTED: {} \n\n",
-    buffer_string,
-    expected_str
-  );
-  buffer_string
+  raw_run_test(&prepared, expected_response, Some(leaked_url)).await
 }
 
 /*
