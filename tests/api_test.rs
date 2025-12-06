@@ -1,27 +1,12 @@
-use auth_api::{active_test_server_url, create_server};
 use auth_api::test_utils::{run_test as raw_run_test, setup_test_server};
-use std::net::TcpStream;
-use std::net::Shutdown;
-use std::time::Duration;
+use auth_api::{active_test_server_url, create_server};
 
 async fn server_factory() -> auth_api::Server {
   create_server(active_test_server_url()).await
 }
 
-async fn wait_for_server() {
-  for _ in 0..20 {
-    if let Ok(stream) = TcpStream::connect(active_test_server_url()) {
-      let _ = stream.shutdown(Shutdown::Both);
-      return;
-    }
-    tokio::time::sleep(Duration::from_millis(100)).await;
-  }
-  panic!("test server not reachable");
-}
-
 async fn run_test(request: &[u8], expected_response: &[u8]) -> String {
   setup_test_server(|| server_factory()).await;
-  wait_for_server().await;
   raw_run_test(request, expected_response)
 }
 
@@ -76,7 +61,8 @@ async fn test_logout_missing_token() {
   run_test(
     b"POST /auth/logout HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -101,7 +87,8 @@ async fn test_profile_missing_token() {
   run_test(
     b"GET /auth/profile HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -126,7 +113,8 @@ async fn test_check_token_invalid_token() {
   run_test(
     b"POST /check-token HTTP/1.1\r\ntoken: invalid\r\n\r\n",
     b"invalid_token",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -134,7 +122,8 @@ async fn test_check_token_missing_header() {
   run_test(
     b"POST /check-token HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 // Users
@@ -279,7 +268,8 @@ async fn test_user_update_missing_token() {
   run_test(
     b"PUT /users/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"Nope\"}",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -612,7 +602,8 @@ async fn test_service_update_missing_token() {
   run_test(
     b"PUT /services/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -680,7 +671,8 @@ async fn test_service_delete_missing_token() {
   run_test(
     b"DELETE /services/1 HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -846,7 +838,8 @@ async fn test_role_create_missing_token() {
   run_test(
     b"POST /roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"missing_role\"}",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -916,7 +909,8 @@ async fn test_role_update_missing_token() {
   run_test(
     b"PUT /roles/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"none\"}",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1025,7 +1019,8 @@ async fn test_permissions_list_missing_token() {
   run_test(
     b"GET /permissions HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1130,7 +1125,8 @@ async fn test_permission_update_missing_token() {
   run_test(
     b"PUT /permissions/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"none\"}",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1193,7 +1189,8 @@ async fn test_permission_delete_success() {
   run_test(
     delete_request.as_bytes(),
     b"\"status\":\"permission_deleted\"",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1201,7 +1198,8 @@ async fn test_permission_delete_missing_token() {
   run_test(
     b"DELETE /permissions/1 HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1370,7 +1368,8 @@ async fn test_role_permissions_list_missing_token() {
   run_test(
     b"GET /roles/1/permissions HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1460,7 +1459,8 @@ async fn test_role_permissions_remove_success() {
   run_test(
     remove_request.as_bytes(),
     b"\"status\":\"permission_removed_from_role\"",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1549,7 +1549,8 @@ async fn test_service_roles_assign_missing_token() {
   run_test(
     b"POST /service-roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1623,7 +1624,8 @@ async fn test_service_roles_list_missing_token() {
   run_test(
     b"GET /services/1/roles HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1710,7 +1712,8 @@ async fn test_service_roles_remove_success() {
   run_test(
     remove_request.as_bytes(),
     b"\"status\":\"role_removed_from_service\"",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1829,7 +1832,8 @@ async fn test_person_service_roles_assign_missing_token() {
   run_test(
     b"POST /person-service-roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -1922,7 +1926,8 @@ async fn test_person_service_roles_remove_success() {
   run_test(
     remove_request.as_bytes(),
     b"\"status\":\"role_removed_from_person\"",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -2043,7 +2048,8 @@ async fn test_person_roles_in_service_missing_token() {
   run_test(
     b"GET /people/1/services/1/roles HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -2188,7 +2194,8 @@ async fn test_persons_with_role_in_service_missing_token() {
   run_test(
     b"GET /services/1/roles/1/people HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -2327,7 +2334,8 @@ async fn test_list_services_of_person_missing_token() {
   run_test(
     b"GET /people/1/services HTTP/1.1\r\n\r\n",
     b"missing_token_header",
-  ).await;
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -2461,7 +2469,8 @@ async fn test_check_permission_success() {
   run_test(
     assign_permission_request.as_bytes(),
     b"\"status\":\"success\"",
-  ).await;
+  )
+  .await;
 
   let assign_person_body = format!(
     "{{\"person_id\":{},\"service_id\":{},\"role_id\":{}}}",
