@@ -1,9 +1,50 @@
-use auth_api::test_utils::{run_test as raw_run_test, setup_test_server};
-use auth_api::{active_test_server_url, create_server};
+use auth_api::test_utils::setup_test_server;
+use auth_api::create_server;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::time::{timeout, Duration};
 
 async fn run_test(request: &[u8], expected_response: &[u8]) -> String {
-  setup_test_server(|| async { create_server(active_test_server_url()).await }).await;
-  raw_run_test(request, expected_response, Some(active_test_server_url())).await
+  setup_test_server(|| async { create_server("127.0.0.1:0").await }).await;
+  let server_url = auth_api::active_test_server_url().to_string();
+
+  // Ensure minimal headers are present.
+  let mut req = String::from_utf8_lossy(request).to_string();
+  if !req.to_ascii_lowercase().contains("host:") {
+    req = req.replacen("\r\n\r\n", "\r\nHost: localhost\r\n\r\n", 1);
+  }
+  if req.contains("\r\n\r\n") && !req.to_ascii_lowercase().contains("content-length:") {
+    let parts: Vec<&str> = req.splitn(2, "\r\n\r\n").collect();
+    let body = parts.get(1).unwrap_or(&"");
+    req = format!("{}\r\nContent-Length: {}\r\n\r\n{}", parts[0], body.len(), body);
+  }
+
+  let mut stream = TcpStream::connect(&server_url)
+    .await
+    .expect("failed to connect to test server");
+  stream
+    .write_all(req.as_bytes())
+    .await
+    .expect("failed to write request");
+  let _ = stream.shutdown().await;
+
+  let mut buffer = Vec::new();
+  let read_result = timeout(Duration::from_secs(5), stream.read_to_end(&mut buffer)).await;
+  match read_result {
+    Ok(Ok(_)) => {}
+    Ok(Err(err)) => panic!("failed reading response: {}", err),
+    Err(_) => panic!("timed out waiting for response from {}", server_url),
+  }
+
+  let buffer_string = String::from_utf8_lossy(&buffer).to_string();
+  let expected_str = String::from_utf8_lossy(expected_response);
+  assert!(
+    buffer_string.contains(expected_str.as_ref()),
+    "ASSERT FAILED:\n\nRECEIVED: {} \nEXPECTED: {} \n\n",
+    buffer_string,
+    expected_str
+  );
+  buffer_string
 }
 
 /*
