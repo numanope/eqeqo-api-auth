@@ -2,13 +2,18 @@ use crate::handlers::*;
 pub mod auth;
 mod database;
 mod handlers;
-pub use httpageboy::{
-  Request, Response, Rt, Server, StatusCode, handler,
-  test_utils::{run_test, setup_test_server},
-};
+pub use httpageboy::{Request, Response, Rt, Server, StatusCode, handler};
 
-pub async fn create_server(url: &str) -> Server {
-  let mut server = Server::new(url, None)
+pub mod test_utils {
+  pub use httpageboy::test_utils::{run_test, setup_test_server};
+}
+
+pub fn active_test_server_url() -> &'static str {
+  httpageboy::test_utils::active_server_url()
+}
+
+pub async fn create_server(server_url: &str) -> Server {
+  let mut server = Server::new(server_url, None)
     .await
     .expect("Failed to create server");
 
