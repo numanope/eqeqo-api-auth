@@ -1,51 +1,28 @@
-use auth_api::create_server;
-use std::io::{Read, Write};
+use auth_api::{active_test_server_url, create_server};
+use auth_api::test_utils::{run_test as raw_run_test, setup_test_server};
 use std::net::TcpStream;
+use std::net::Shutdown;
 use std::time::Duration;
-use tokio::sync::OnceCell;
 
-const TEST_SERVER_URL: &str = "127.0.0.1:38080";
-static SERVER_STARTED: OnceCell<()> = OnceCell::const_new();
+async fn server_factory() -> auth_api::Server {
+  create_server(active_test_server_url()).await
+}
 
-async fn ensure_server() {
-  SERVER_STARTED
-    .get_or_init(|| async {
-      std::thread::spawn(|| {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-          .enable_all()
-          .build()
-          .expect("create test runtime");
-        rt.block_on(async {
-          let server = create_server(TEST_SERVER_URL).await;
-          server.run().await;
-        });
-      });
-      tokio::time::sleep(Duration::from_millis(250)).await;
-    })
-    .await;
+async fn wait_for_server() {
+  for _ in 0..20 {
+    if let Ok(stream) = TcpStream::connect(active_test_server_url()) {
+      let _ = stream.shutdown(Shutdown::Both);
+      return;
+    }
+    tokio::time::sleep(Duration::from_millis(100)).await;
+  }
+  panic!("test server not reachable");
 }
 
 async fn run_test(request: &[u8], expected_response: &[u8]) -> String {
-  ensure_server().await;
-
-  let mut stream = TcpStream::connect(TEST_SERVER_URL).expect("Failed to connect to server");
-
-  stream.write_all(request).unwrap();
-  stream.shutdown(std::net::Shutdown::Write).unwrap();
-
-  let mut buffer = Vec::new();
-  stream.read_to_end(&mut buffer).unwrap();
-
-  let buffer_string = String::from_utf8_lossy(&buffer).to_string();
-  let expected_response_string = String::from_utf8_lossy(expected_response).to_string();
-
-  assert!(
-    buffer_string.contains(&expected_response_string),
-    "ASSERT FAILED:\n\nRECEIVED: {} \nEXPECTED: {} \n\n",
-    buffer_string,
-    expected_response_string
-  );
-  buffer_string
+  setup_test_server(|| server_factory()).await;
+  wait_for_server().await;
+  raw_run_test(request, expected_response)
 }
 
 /*
