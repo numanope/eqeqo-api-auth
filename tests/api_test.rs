@@ -18,11 +18,7 @@ async fn test_login_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -30,11 +26,7 @@ async fn test_login_invalid_password() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"wrong\"}";
   let expected = b"invalid_credentials";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -42,11 +34,7 @@ async fn test_logout_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -57,12 +45,7 @@ async fn test_logout_success() {
   let logout_request = format!("POST /auth/logout HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   let request = logout_request.as_bytes();
   let expected = b"\"status\":\"logged_out\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -70,12 +53,7 @@ async fn test_logout_missing_token() {
   boot_server().await;
   let request = b"POST /auth/logout HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -83,11 +61,7 @@ async fn test_profile_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -98,11 +72,7 @@ async fn test_profile_success() {
   let profile_request = format!("GET /auth/profile HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   let request = profile_request.as_bytes();
   let expected = b"\"payload\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -110,12 +80,7 @@ async fn test_profile_missing_token() {
   boot_server().await;
   let request = b"GET /auth/profile HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -123,11 +88,7 @@ async fn test_check_token_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -138,12 +99,7 @@ async fn test_check_token_success() {
   let check_request = format!("POST /check-token HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   let request = check_request.as_bytes();
   let expected = b"\"valid\":true";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -151,12 +107,7 @@ async fn test_check_token_invalid_token() {
   boot_server().await;
   let request = b"POST /check-token HTTP/1.1\r\ntoken: invalid\r\n\r\n";
   let expected = b"invalid_token";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -164,12 +115,7 @@ async fn test_check_token_missing_header() {
   boot_server().await;
   let request = b"POST /check-token HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 // Users
@@ -179,11 +125,7 @@ async fn test_users_list_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -194,12 +136,7 @@ async fn test_users_list_success() {
   let list_request = format!("GET /users HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   let request = list_request.as_bytes();
   let expected = b"\"username\":\"adm1\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -207,12 +144,7 @@ async fn test_users_list_missing_token() {
   boot_server().await;
   let request = b"GET /users HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -220,11 +152,7 @@ async fn test_user_create_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -253,12 +181,7 @@ async fn test_user_create_success() {
   let expected_username = format!("\"username\":\"{}\"", username);
   let request = create_request.as_bytes();
   let expected = expected_username.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -266,11 +189,7 @@ async fn test_user_create_missing_token() {
   boot_server().await;
   let request = b"POST /users HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"missing_token\",\"password_hash\":\"secret\",\"name\":\"No Auth\",\"person_type\":\"N\",\"document_type\":\"DNI\",\"document_number\":\"123\"}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -278,11 +197,7 @@ async fn test_user_create_invalid_body() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -296,12 +211,7 @@ async fn test_user_create_invalid_body() {
   );
   let request = create_request.as_bytes();
   let expected = b"invalid_request_body";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -309,11 +219,7 @@ async fn test_user_update_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -341,11 +247,7 @@ async fn test_user_update_success() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id_segment = create_response
     .split("\"id\":")
     .nth(1)
@@ -363,25 +265,16 @@ async fn test_user_update_success() {
   );
   let request = update_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
 async fn test_user_update_missing_token() {
   boot_server().await;
-  let request = b"PUT /users/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"Nope\"}";
+  let request =
+    b"PUT /users/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"Nope\"}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -389,11 +282,7 @@ async fn test_user_update_invalid_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -407,12 +296,7 @@ async fn test_user_update_invalid_id() {
   );
   let request = update_request.as_bytes();
   let expected = b"invalid_user_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -420,11 +304,7 @@ async fn test_user_delete_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -452,11 +332,7 @@ async fn test_user_delete_success() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id_segment = create_response
     .split("\"id\":")
     .nth(1)
@@ -472,12 +348,7 @@ async fn test_user_delete_success() {
   );
   let request = delete_request.as_bytes();
   let expected = b"\"status\":\"user_deleted\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -485,12 +356,7 @@ async fn test_user_delete_missing_token() {
   boot_server().await;
   let request = b"DELETE /users/1 HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -498,11 +364,7 @@ async fn test_user_delete_invalid_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -516,12 +378,7 @@ async fn test_user_delete_invalid_id() {
   );
   let request = delete_request.as_bytes();
   let expected = b"invalid_user_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -529,11 +386,7 @@ async fn test_user_get_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -561,11 +414,7 @@ async fn test_user_get_success() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id = create_response
     .split("\"id\":")
     .nth(1)
@@ -582,12 +431,7 @@ async fn test_user_get_success() {
   let expected_username = format!("\"username\":\"{}\"", username);
   let request = get_request.as_bytes();
   let expected = expected_username.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -595,12 +439,7 @@ async fn test_user_get_missing_token() {
   boot_server().await;
   let request = b"GET /users/1 HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -608,11 +447,7 @@ async fn test_user_get_not_found() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -640,11 +475,7 @@ async fn test_user_get_not_found() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id = create_response
     .split("\"id\":")
     .nth(1)
@@ -660,12 +491,7 @@ async fn test_user_get_not_found() {
   );
   let request = delete_request.as_bytes();
   let expected = b"\"status\":\"user_deleted\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let get_request = format!(
     "GET /users/{id} HTTP/1.1\r\ntoken: {token}\r\n\r\n",
@@ -674,11 +500,7 @@ async fn test_user_get_not_found() {
   );
   let request = get_request.as_bytes();
   let expected = b"user_not_found";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 // Services
@@ -688,11 +510,7 @@ async fn test_services_list_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -703,11 +521,7 @@ async fn test_services_list_success() {
   let list_request = format!("GET /services HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   let request = list_request.as_bytes();
   let expected = b"Service A";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -715,12 +529,7 @@ async fn test_services_list_missing_token() {
   boot_server().await;
   let request = b"GET /services HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -728,11 +537,7 @@ async fn test_service_create_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -757,12 +562,7 @@ async fn test_service_create_success() {
   let expected = format!("\"name\":\"{}\"", service_name);
   let request = create_request.as_bytes();
   let expected = expected.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -770,11 +570,7 @@ async fn test_service_create_missing_token() {
   boot_server().await;
   let request = b"POST /services HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"svc_missing\",\"description\":null}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -782,11 +578,7 @@ async fn test_service_create_invalid_body() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -800,12 +592,7 @@ async fn test_service_create_invalid_body() {
   );
   let request = create_request.as_bytes();
   let expected = b"invalid_request_body";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -813,11 +600,7 @@ async fn test_service_update_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -837,11 +620,7 @@ async fn test_service_update_success() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = create_response
     .split("\"id\":")
     .nth(1)
@@ -857,12 +636,7 @@ async fn test_service_update_success() {
   );
   let request = update_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -870,12 +644,7 @@ async fn test_service_update_missing_token() {
   boot_server().await;
   let request = b"PUT /services/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -883,11 +652,7 @@ async fn test_service_update_invalid_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -901,12 +666,7 @@ async fn test_service_update_invalid_id() {
   );
   let request = update_request.as_bytes();
   let expected = b"invalid_service_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -914,11 +674,7 @@ async fn test_service_delete_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -938,11 +694,7 @@ async fn test_service_delete_success() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = create_response
     .split("\"id\":")
     .nth(1)
@@ -958,12 +710,7 @@ async fn test_service_delete_success() {
   );
   let request = delete_request.as_bytes();
   let expected = b"\"status\":\"service_deleted\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -971,12 +718,7 @@ async fn test_service_delete_missing_token() {
   boot_server().await;
   let request = b"DELETE /services/1 HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -984,11 +726,7 @@ async fn test_service_delete_invalid_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1002,12 +740,7 @@ async fn test_service_delete_invalid_id() {
   );
   let request = delete_request.as_bytes();
   let expected = b"invalid_service_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 // Roles
@@ -1017,11 +750,7 @@ async fn test_roles_list_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1032,12 +761,7 @@ async fn test_roles_list_success() {
   let list_request = format!("GET /roles HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   let request = list_request.as_bytes();
   let expected = b"\"name\":\"Admin\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1045,12 +769,7 @@ async fn test_roles_list_missing_token() {
   boot_server().await;
   let request = b"GET /roles HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1058,11 +777,7 @@ async fn test_role_get_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1082,11 +797,7 @@ async fn test_role_get_success() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = create_response
     .split("\"id\":")
     .nth(1)
@@ -1103,12 +814,7 @@ async fn test_role_get_success() {
   let expected = format!("\"name\":\"{}\"", role_name);
   let request = get_request.as_bytes();
   let expected = expected.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1116,11 +822,7 @@ async fn test_role_get_not_found() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1139,11 +841,7 @@ async fn test_role_get_not_found() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = create_response
     .split("\"id\":")
     .nth(1)
@@ -1159,12 +857,7 @@ async fn test_role_get_not_found() {
   );
   let request = delete_request.as_bytes();
   let expected = b"\"status\":\"role_deleted\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let get_request = format!(
     "GET /roles/{id} HTTP/1.1\r\ntoken: {token}\r\n\r\n",
@@ -1173,11 +866,7 @@ async fn test_role_get_not_found() {
   );
   let request = get_request.as_bytes();
   let expected = b"role_not_found";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1185,11 +874,7 @@ async fn test_role_create_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1210,25 +895,16 @@ async fn test_role_create_success() {
   let expected = format!("\"name\":\"{}\"", role_name);
   let request = create_request.as_bytes();
   let expected = expected.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
 async fn test_role_create_missing_token() {
   boot_server().await;
-  let request = b"POST /roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"missing_role\"}";
+  let request =
+    b"POST /roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"missing_role\"}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1236,11 +912,7 @@ async fn test_role_create_invalid_body() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1254,12 +926,7 @@ async fn test_role_create_invalid_body() {
   );
   let request = create_request.as_bytes();
   let expected = b"invalid_request_body";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1267,11 +934,7 @@ async fn test_role_update_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1291,11 +954,7 @@ async fn test_role_update_success() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id_segment = create_response
     .split("\"id\":")
     .nth(1)
@@ -1313,25 +972,16 @@ async fn test_role_update_success() {
   );
   let request = update_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
 async fn test_role_update_missing_token() {
   boot_server().await;
-  let request = b"PUT /roles/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"none\"}";
+  let request =
+    b"PUT /roles/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"none\"}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1339,11 +989,7 @@ async fn test_role_update_invalid_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1357,12 +1003,7 @@ async fn test_role_update_invalid_id() {
   );
   let request = update_request.as_bytes();
   let expected = b"invalid_role_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1370,11 +1011,7 @@ async fn test_role_delete_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1394,11 +1031,7 @@ async fn test_role_delete_success() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id_segment = create_response
     .split("\"id\":")
     .nth(1)
@@ -1414,12 +1047,7 @@ async fn test_role_delete_success() {
   );
   let request = delete_request.as_bytes();
   let expected = b"\"status\":\"role_deleted\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1427,12 +1055,7 @@ async fn test_role_delete_missing_token() {
   boot_server().await;
   let request = b"DELETE /roles/1 HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1440,11 +1063,7 @@ async fn test_role_delete_invalid_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1455,12 +1074,7 @@ async fn test_role_delete_invalid_id() {
   let delete_request = format!("DELETE /roles/invalid HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   let request = delete_request.as_bytes();
   let expected = b"invalid_role_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 // Permissions
@@ -1470,11 +1084,7 @@ async fn test_permissions_list_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1485,12 +1095,7 @@ async fn test_permissions_list_success() {
   let list_request = format!("GET /permissions HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
   let request = list_request.as_bytes();
   let expected = b"\"name\":\"read\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1498,12 +1103,7 @@ async fn test_permissions_list_missing_token() {
   boot_server().await;
   let request = b"GET /permissions HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1511,11 +1111,7 @@ async fn test_permission_create_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1536,12 +1132,7 @@ async fn test_permission_create_success() {
   let expected = format!("\"name\":\"{}\"", permission_name);
   let request = create_request.as_bytes();
   let expected = expected.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1549,11 +1140,7 @@ async fn test_permission_create_missing_token() {
   boot_server().await;
   let request = b"POST /permissions HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"perm_missing\"}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1561,11 +1148,7 @@ async fn test_permission_create_invalid_body() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1579,12 +1162,7 @@ async fn test_permission_create_invalid_body() {
   );
   let request = create_request.as_bytes();
   let expected = b"invalid_request_body";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1592,11 +1170,7 @@ async fn test_permission_update_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1616,11 +1190,7 @@ async fn test_permission_update_success() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let permission_id_segment = create_response
     .split("\"id\":")
     .nth(1)
@@ -1638,25 +1208,16 @@ async fn test_permission_update_success() {
   );
   let request = update_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
 async fn test_permission_update_missing_token() {
   boot_server().await;
-  let request = b"PUT /permissions/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"none\"}";
+  let request =
+    b"PUT /permissions/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"none\"}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1664,11 +1225,7 @@ async fn test_permission_update_invalid_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1682,12 +1239,7 @@ async fn test_permission_update_invalid_id() {
   );
   let request = update_request.as_bytes();
   let expected = b"invalid_permission_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1695,11 +1247,7 @@ async fn test_permission_delete_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1719,11 +1267,7 @@ async fn test_permission_delete_success() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let create_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let create_response = run_test(request, expected, Some(SERVER_URL)).await;
   let permission_id_segment = create_response
     .split("\"id\":")
     .nth(1)
@@ -1739,12 +1283,7 @@ async fn test_permission_delete_success() {
   );
   let request = delete_request.as_bytes();
   let expected = b"\"status\":\"permission_deleted\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1752,12 +1291,7 @@ async fn test_permission_delete_missing_token() {
   boot_server().await;
   let request = b"DELETE /permissions/1 HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1765,11 +1299,7 @@ async fn test_permission_delete_invalid_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1783,12 +1313,7 @@ async fn test_permission_delete_invalid_id() {
   );
   let request = delete_request.as_bytes();
   let expected = b"invalid_permission_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 // Role-Permission relations
@@ -1798,11 +1323,7 @@ async fn test_role_permissions_assign_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1821,11 +1342,7 @@ async fn test_role_permissions_assign_success() {
   );
   let request = create_role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -1846,12 +1363,7 @@ async fn test_role_permissions_assign_success() {
   );
   let request = create_permission_request.as_bytes();
   let expected = b"\"id\"";
-  let permission_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  let permission_response = run_test(request, expected, Some(SERVER_URL)).await;
   let permission_id = permission_response
     .split("\"id\":")
     .nth(1)
@@ -1871,12 +1383,7 @@ async fn test_role_permissions_assign_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1884,11 +1391,7 @@ async fn test_role_permissions_assign_missing_token() {
   boot_server().await;
   let request = b"POST /role-permissions HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"role_id\":1,\"permission_id\":1}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1896,11 +1399,7 @@ async fn test_role_permissions_list_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -1919,11 +1418,7 @@ async fn test_role_permissions_list_success() {
   );
   let request = role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -1943,11 +1438,7 @@ async fn test_role_permissions_list_success() {
   );
   let request = permission_request.as_bytes();
   let expected = b"\"id\"";
-  let permission_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let permission_response = run_test(request, expected, Some(SERVER_URL)).await;
   let permission_id = permission_response
     .split("\"id\":")
     .nth(1)
@@ -1967,12 +1458,7 @@ async fn test_role_permissions_list_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let list_request = format!(
     "GET /roles/{id}/permissions HTTP/1.1\r\ntoken: {token}\r\n\r\n",
@@ -1982,12 +1468,7 @@ async fn test_role_permissions_list_success() {
   let expected = format!("\"name\":\"{}\"", permission_name);
   let request = list_request.as_bytes();
   let expected = expected.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -1995,12 +1476,7 @@ async fn test_role_permissions_list_missing_token() {
   boot_server().await;
   let request = b"GET /roles/1/permissions HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2008,11 +1484,7 @@ async fn test_role_permissions_list_invalid_role_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2026,12 +1498,7 @@ async fn test_role_permissions_list_invalid_role_id() {
   );
   let request = list_request.as_bytes();
   let expected = b"invalid_role_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2039,11 +1506,7 @@ async fn test_role_permissions_remove_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2062,11 +1525,7 @@ async fn test_role_permissions_remove_success() {
   );
   let request = role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -2086,11 +1545,7 @@ async fn test_role_permissions_remove_success() {
   );
   let request = permission_request.as_bytes();
   let expected = b"\"id\"";
-  let permission_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let permission_response = run_test(request, expected, Some(SERVER_URL)).await;
   let permission_id = permission_response
     .split("\"id\":")
     .nth(1)
@@ -2110,12 +1565,7 @@ async fn test_role_permissions_remove_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let remove_request = format!(
     "DELETE /role-permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
@@ -2123,12 +1573,7 @@ async fn test_role_permissions_remove_success() {
   );
   let request = remove_request.as_bytes();
   let expected = b"\"status\":\"permission_removed_from_role\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2136,11 +1581,7 @@ async fn test_role_permissions_remove_invalid_body() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2154,12 +1595,7 @@ async fn test_role_permissions_remove_invalid_body() {
   );
   let request = remove_request.as_bytes();
   let expected = b"invalid_request_body";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 // Service-Roles relations
@@ -2169,11 +1605,7 @@ async fn test_service_roles_assign_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2194,12 +1626,7 @@ async fn test_service_roles_assign_success() {
   );
   let request = create_service_request.as_bytes();
   let expected = b"\"id\"";
-  let service_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  let service_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = service_response
     .split("\"id\":")
     .nth(1)
@@ -2219,11 +1646,7 @@ async fn test_service_roles_assign_success() {
   );
   let request = create_role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -2239,12 +1662,7 @@ async fn test_service_roles_assign_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2252,12 +1670,7 @@ async fn test_service_roles_assign_missing_token() {
   boot_server().await;
   let request = b"POST /service-roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2265,11 +1678,7 @@ async fn test_service_roles_list_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2289,11 +1698,7 @@ async fn test_service_roles_list_success() {
   );
   let request = service_request.as_bytes();
   let expected = b"\"id\"";
-  let service_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let service_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = service_response
     .split("\"id\":")
     .nth(1)
@@ -2313,11 +1718,7 @@ async fn test_service_roles_list_success() {
   );
   let request = role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -2333,12 +1734,7 @@ async fn test_service_roles_list_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let list_request = format!(
     "GET /services/{id}/roles HTTP/1.1\r\ntoken: {token}\r\n\r\n",
@@ -2348,12 +1744,7 @@ async fn test_service_roles_list_success() {
   let expected = format!("\"name\":\"{}\"", role_name);
   let request = list_request.as_bytes();
   let expected = expected.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2361,12 +1752,7 @@ async fn test_service_roles_list_missing_token() {
   boot_server().await;
   let request = b"GET /services/1/roles HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2374,11 +1760,7 @@ async fn test_service_roles_list_invalid_service_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2392,12 +1774,7 @@ async fn test_service_roles_list_invalid_service_id() {
   );
   let request = list_request.as_bytes();
   let expected = b"invalid_service_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2405,11 +1782,7 @@ async fn test_service_roles_remove_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2429,11 +1802,7 @@ async fn test_service_roles_remove_success() {
   );
   let request = service_request.as_bytes();
   let expected = b"\"id\"";
-  let service_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let service_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = service_response
     .split("\"id\":")
     .nth(1)
@@ -2453,11 +1822,7 @@ async fn test_service_roles_remove_success() {
   );
   let request = role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -2473,12 +1838,7 @@ async fn test_service_roles_remove_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let remove_request = format!(
     "DELETE /service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
@@ -2486,12 +1846,7 @@ async fn test_service_roles_remove_success() {
   );
   let request = remove_request.as_bytes();
   let expected = b"\"status\":\"role_removed_from_service\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2499,11 +1854,7 @@ async fn test_service_roles_remove_invalid_body() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2517,12 +1868,7 @@ async fn test_service_roles_remove_invalid_body() {
   );
   let request = remove_request.as_bytes();
   let expected = b"invalid_request_body";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 // Person-Service-Roles relations
@@ -2532,11 +1878,7 @@ async fn test_person_service_roles_assign_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2564,11 +1906,7 @@ async fn test_person_service_roles_assign_success() {
   );
   let request = create_user_request.as_bytes();
   let expected = b"\"id\"";
-  let user_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let user_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id = user_response
     .split("\"id\":")
     .nth(1)
@@ -2590,12 +1928,7 @@ async fn test_person_service_roles_assign_success() {
   );
   let request = create_service_request.as_bytes();
   let expected = b"\"id\"";
-  let service_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  let service_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = service_response
     .split("\"id\":")
     .nth(1)
@@ -2615,11 +1948,7 @@ async fn test_person_service_roles_assign_success() {
   );
   let request = create_role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -2638,12 +1967,7 @@ async fn test_person_service_roles_assign_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2651,12 +1975,7 @@ async fn test_person_service_roles_assign_missing_token() {
   boot_server().await;
   let request = b"POST /person-service-roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2664,11 +1983,7 @@ async fn test_person_service_roles_remove_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2692,11 +2007,7 @@ async fn test_person_service_roles_remove_success() {
   );
   let request = create_user_request.as_bytes();
   let expected = b"\"id\"";
-  let user_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let user_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id = user_response
     .split("\"id\":")
     .nth(1)
@@ -2717,12 +2028,7 @@ async fn test_person_service_roles_remove_success() {
   );
   let request = create_service_request.as_bytes();
   let expected = b"\"id\"";
-  let service_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  let service_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = service_response
     .split("\"id\":")
     .nth(1)
@@ -2742,11 +2048,7 @@ async fn test_person_service_roles_remove_success() {
   );
   let request = create_role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -2765,12 +2067,7 @@ async fn test_person_service_roles_remove_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let remove_request = format!(
     "DELETE /person-service-roles HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
@@ -2778,12 +2075,7 @@ async fn test_person_service_roles_remove_success() {
   );
   let request = remove_request.as_bytes();
   let expected = b"\"status\":\"role_removed_from_person\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2791,11 +2083,7 @@ async fn test_person_service_roles_remove_invalid_body() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2809,12 +2097,7 @@ async fn test_person_service_roles_remove_invalid_body() {
   );
   let request = remove_request.as_bytes();
   let expected = b"invalid_request_body";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2822,11 +2105,7 @@ async fn test_person_roles_in_service_list_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2850,11 +2129,7 @@ async fn test_person_roles_in_service_list_success() {
   );
   let request = create_user_request.as_bytes();
   let expected = b"\"id\"";
-  let user_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let user_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id = user_response
     .split("\"id\":")
     .nth(1)
@@ -2875,12 +2150,7 @@ async fn test_person_roles_in_service_list_success() {
   );
   let request = create_service_request.as_bytes();
   let expected = b"\"id\"";
-  let service_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  let service_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = service_response
     .split("\"id\":")
     .nth(1)
@@ -2900,11 +2170,7 @@ async fn test_person_roles_in_service_list_success() {
   );
   let request = create_role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -2923,12 +2189,7 @@ async fn test_person_roles_in_service_list_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let list_request = format!(
     "GET /people/{person_id}/services/{service_id}/roles HTTP/1.1\r\ntoken: {token}\r\n\r\n",
@@ -2939,12 +2200,7 @@ async fn test_person_roles_in_service_list_success() {
   let expected = format!("\"name\":\"{}\"", role_name);
   let request = list_request.as_bytes();
   let expected = expected.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2952,12 +2208,7 @@ async fn test_person_roles_in_service_missing_token() {
   boot_server().await;
   let request = b"GET /people/1/services/1/roles HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -2965,11 +2216,7 @@ async fn test_person_roles_in_service_invalid_service_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -2993,11 +2240,7 @@ async fn test_person_roles_in_service_invalid_service_id() {
   );
   let request = create_request.as_bytes();
   let expected = b"\"id\"";
-  let user_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let user_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id = user_response
     .split("\"id\":")
     .nth(1)
@@ -3013,12 +2256,7 @@ async fn test_person_roles_in_service_invalid_service_id() {
   );
   let request = list_request.as_bytes();
   let expected = b"invalid_service_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -3026,11 +2264,7 @@ async fn test_persons_with_role_in_service_list_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -3054,11 +2288,7 @@ async fn test_persons_with_role_in_service_list_success() {
   );
   let request = create_user_request.as_bytes();
   let expected = b"\"id\"";
-  let user_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let user_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id = user_response
     .split("\"id\":")
     .nth(1)
@@ -3079,12 +2309,7 @@ async fn test_persons_with_role_in_service_list_success() {
   );
   let request = create_service_request.as_bytes();
   let expected = b"\"id\"";
-  let service_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  let service_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = service_response
     .split("\"id\":")
     .nth(1)
@@ -3104,11 +2329,7 @@ async fn test_persons_with_role_in_service_list_success() {
   );
   let request = create_role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -3127,12 +2348,7 @@ async fn test_persons_with_role_in_service_list_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let list_request = format!(
     "GET /services/{service_id}/roles/{role_id}/people HTTP/1.1\r\ntoken: {token}\r\n\r\n",
@@ -3143,12 +2359,7 @@ async fn test_persons_with_role_in_service_list_success() {
   let expected = format!("\"username\":\"{}\"", username);
   let request = list_request.as_bytes();
   let expected = expected.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -3156,12 +2367,7 @@ async fn test_persons_with_role_in_service_missing_token() {
   boot_server().await;
   let request = b"GET /services/1/roles/1/people HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -3169,11 +2375,7 @@ async fn test_persons_with_role_in_service_invalid_service_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -3192,11 +2394,7 @@ async fn test_persons_with_role_in_service_invalid_service_id() {
   );
   let request = role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -3212,12 +2410,7 @@ async fn test_persons_with_role_in_service_invalid_service_id() {
   );
   let request = list_request.as_bytes();
   let expected = b"invalid_service_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -3225,11 +2418,7 @@ async fn test_list_services_of_person_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -3253,11 +2442,7 @@ async fn test_list_services_of_person_success() {
   );
   let request = create_user_request.as_bytes();
   let expected = b"\"id\"";
-  let user_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let user_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id = user_response
     .split("\"id\":")
     .nth(1)
@@ -3278,12 +2463,7 @@ async fn test_list_services_of_person_success() {
   );
   let request = create_service_request.as_bytes();
   let expected = b"\"id\"";
-  let service_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  let service_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = service_response
     .split("\"id\":")
     .nth(1)
@@ -3303,11 +2483,7 @@ async fn test_list_services_of_person_success() {
   );
   let request = role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -3326,12 +2502,7 @@ async fn test_list_services_of_person_success() {
   );
   let request = assign_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let list_request = format!(
     "GET /people/{person_id}/services HTTP/1.1\r\ntoken: {token}\r\n\r\n",
@@ -3341,12 +2512,7 @@ async fn test_list_services_of_person_success() {
   let expected = format!("\"name\":\"{}\"", service_name);
   let request = list_request.as_bytes();
   let expected = expected.as_bytes();
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -3354,12 +2520,7 @@ async fn test_list_services_of_person_missing_token() {
   boot_server().await;
   let request = b"GET /people/1/services HTTP/1.1\r\n\r\n";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -3367,11 +2528,7 @@ async fn test_list_services_of_person_invalid_id() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -3385,12 +2542,7 @@ async fn test_list_services_of_person_invalid_id() {
   );
   let request = list_request.as_bytes();
   let expected = b"invalid_person_id";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -3398,11 +2550,7 @@ async fn test_check_permission_success() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -3426,11 +2574,7 @@ async fn test_check_permission_success() {
   );
   let request = create_user_request.as_bytes();
   let expected = b"\"id\"";
-  let user_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let user_response = run_test(request, expected, Some(SERVER_URL)).await;
   let user_id = user_response
     .split("\"id\":")
     .nth(1)
@@ -3450,11 +2594,7 @@ async fn test_check_permission_success() {
   );
   let request = role_request.as_bytes();
   let expected = b"\"id\"";
-  let role_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let role_response = run_test(request, expected, Some(SERVER_URL)).await;
   let role_id = role_response
     .split("\"id\":")
     .nth(1)
@@ -3474,11 +2614,7 @@ async fn test_check_permission_success() {
   );
   let request = permission_request.as_bytes();
   let expected = b"\"id\"";
-  let permission_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let permission_response = run_test(request, expected, Some(SERVER_URL)).await;
   let permission_id = permission_response
     .split("\"id\":")
     .nth(1)
@@ -3499,12 +2635,7 @@ async fn test_check_permission_success() {
   );
   let request = create_service_request.as_bytes();
   let expected = b"\"id\"";
-  let service_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  let service_response = run_test(request, expected, Some(SERVER_URL)).await;
   let service_id = service_response
     .split("\"id\":")
     .nth(1)
@@ -3520,12 +2651,7 @@ async fn test_check_permission_success() {
   );
   let request = assign_service_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let assign_permission_body = format!(
     "{{\"service_id\":{service_id},\"role_id\":{role_id},\"permission_id\":{permission_id}}}",
@@ -3539,12 +2665,7 @@ async fn test_check_permission_success() {
   );
   let request = assign_permission_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let assign_person_body = format!(
     "{{\"person_id\":{},\"service_id\":{},\"role_id\":{}}}",
@@ -3556,12 +2677,7 @@ async fn test_check_permission_success() {
   );
   let request = assign_person_request.as_bytes();
   let expected = b"\"status\":\"success\"";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 
   let check_body = format!(
     "{{\"person_id\":{person},\"service_id\":{service},\"permission_name\":\"{perm}\"}}",
@@ -3577,12 +2693,7 @@ async fn test_check_permission_success() {
   );
   let request = check_request.as_bytes();
   let expected = b"\"has_permission\":true";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -3590,11 +2701,7 @@ async fn test_check_permission_missing_token() {
   boot_server().await;
   let request = b"GET /check-permission HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"person_id\":1,\"service_id\":1,\"permission_name\":\"any\"}";
   let expected = b"missing_token_header";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
 
 #[tokio::test]
@@ -3602,11 +2709,7 @@ async fn test_check_permission_invalid_body() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
-  let login_response = run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  ).await;
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
   let token = login_response
     .split("\"token\":\"")
     .nth(1)
@@ -3620,10 +2723,5 @@ async fn test_check_permission_invalid_body() {
   );
   let request = check_request.as_bytes();
   let expected = b"invalid_request_body";
-  run_test(
-    request,
-    expected,
-    Some(SERVER_URL),
-  )
-  .await;
+  run_test(request, expected, Some(SERVER_URL)).await;
 }
