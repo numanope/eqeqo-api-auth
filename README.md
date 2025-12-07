@@ -17,6 +17,7 @@ cargo run
 ```bash
 cargo test
 ```
+Tests assume the seeded `auth_api` database from `db/run_all.sql`.
 
 Server default: `http://127.0.0.1:7878`
 
@@ -34,38 +35,30 @@ TOKEN_RENEW_THRESHOLD_SECONDS=30
 | Method | Path | Description |
 | ------ | ---- | ----------- |
 | **POST** | `/auth/login` | Generate a new token for valid user |
-| **POST** | `/auth/logout` | Revoke token (delete from cache) |
-| **GET** | `/auth/profile` | Validate token and return user payload (renews if valid) |
-| **POST** | `/check-token` | Validate token from another API (atomic renewal logic) |
+| **POST** | `/auth/logout` | Revoke token (delete from cache) — requires `token:` header |
+| **GET** | `/auth/profile` | Validate token and return user payload (renews if valid) — requires `token:` header |
+| **POST** | `/check-token` | Validate token from another API (atomic renewal logic) — requires `token:` header |
 | **GET** | `/users` | List users |
-| **POST** | `/users` | Create new user |
-| **PUT** | `/users/{id}` | Update user |
-| **DELETE** | `/users/{id}` | Disable or delete user |
+| **POST** | `/users` | Create new user — requires `token:` header |
+| **PUT** | `/users/{id}` | Update user — requires `token:` header |
+| **DELETE** | `/users/{id}` | Disable or delete user — requires `token:` header |
 | **GET** | `/roles` | List roles |
-| **POST** | `/roles` | Create role |
+| **POST** | `/roles` | Create role — requires `token:` header |
 | **GET** | `/permissions` | List permissions |
-| **POST** | `/permissions` | Create permission |
-| **POST** | `/role-permissions` | Assign permission to role |
-| **POST** | `/service-roles` | Assign role to service |
-| **POST** | `/person-service-roles` | Assign role to person in a service |
+| **POST** | `/permissions` | Create permission — requires `token:` header |
+| **POST** | `/role-permissions` | Assign permission to role — requires `token:` header |
+| **POST** | `/service-roles` | Assign role to service — requires `token:` header |
+| **POST** | `/person-service-roles` | Assign role to person in a service — requires `token:` header |
 
 
 ## 🔁 Token logic
 - Generated at login (`hash(secret + random + timestamp)`). NO JWT nor similar.
-- Stored in `auth.tokens_cache` with `payload` and `modified_at`.
-- Renewed automatically if not expired.
-- Removed on logout or user deletion.
-All requests must include token in *header*
-
-```
-token: <token>
-```
+- Stored centrally in `auth.tokens_cache` with `payload` and `modified_at`.
+- All protected requests must include `token:` header (no query params). `/auth/login` is the only public route.
+- Short TTL (2–5 min) with atomic renewal near expiry to avoid contention.
+- Revocation on logout or user deletion; cleanup job periodically removes expired tokens.
 - No tokens in URLs.
-- Tokens stored centrally in DB.
-- Short TTL (2–5 min). Cache life, must be defined in one single place in code.
-- Conditional atomic renewal to prevent DB contention.
-- Revocation: delete from table.
-- Logs: minimal (token, endpoint, ts, ip).
+- Minimal logging per request: token, endpoint, timestamp, IP.
 
 
 ## 🧭 Use case diagram
