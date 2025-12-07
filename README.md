@@ -14,12 +14,12 @@ cargo run
 ```
 
 **Tests**
+Tests assume the seeded `auth_api` database from `db/run_all.sql`.
+Server default: `http://127.0.0.1:7878`
+
 ```bash
 cargo test
 ```
-Tests assume the seeded `auth_api` database from `db/run_all.sql`.
-
-Server default: `http://127.0.0.1:7878`
 
 Environment:
 ```
