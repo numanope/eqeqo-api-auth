@@ -17,7 +17,7 @@ path = "src/lib.rs"
 
 [dependencies]
 dotenvy = "0.15"
-httpageboy = { version = "1.0.13", features = ["async_tokio"] }
+httpageboy = { version = "1.0.15", features = ["async_tokio"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio"] }
