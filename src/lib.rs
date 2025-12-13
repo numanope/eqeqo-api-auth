@@ -12,10 +12,45 @@ pub fn active_test_server_url() -> &'static str {
   httpageboy::test_utils::active_test_server_url()
 }
 
+fn build_cors_policy() -> httpageboy::CorsPolicy {
+  let mut policy = httpageboy::CorsPolicy::default();
+
+  if let Ok(origins) = std::env::var("CORS") {
+    if !origins.trim().is_empty() {
+      policy.allow_origin = origins;
+    }
+  }
+
+  let mut headers: Vec<String> = policy
+    .allow_headers
+    .split(',')
+    .map(|h| h.trim().to_string())
+    .filter(|h| !h.is_empty())
+    .collect();
+
+  let mut push_unique = |value: &str| {
+    if !headers.iter().any(|h| h.eq_ignore_ascii_case(value)) {
+      headers.push(value.to_string());
+    }
+  };
+
+  push_unique("token");
+  if let Ok(extra) = std::env::var("CORS_HEADERS") {
+    for header in extra.split(',').map(|h| h.trim()).filter(|h| !h.is_empty()) {
+      push_unique(header);
+    }
+  }
+
+  policy.allow_headers = headers.join(", ");
+  policy
+}
+
 pub async fn create_server(server_url: &str) -> Server {
   let mut server = Server::new(server_url, None)
     .await
     .expect("Failed to create server");
+
+  server.set_cors(build_cors_policy());
 
   server.add_route("/", Rt::GET, handler!(home));
 

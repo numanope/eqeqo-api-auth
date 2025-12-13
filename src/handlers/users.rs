@@ -172,13 +172,28 @@ pub async fn create_user(req: &Request) -> Response {
     Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
 
+  let is_blank = |value: &str| value.trim().is_empty();
+  if is_blank(&payload.username)
+    || is_blank(&payload.password_hash)
+    || is_blank(&payload.name)
+    || is_blank(&payload.person_type)
+    || is_blank(&payload.document_type)
+    || is_blank(&payload.document_number)
+  {
+    return error_response(StatusCode::BadRequest, "invalid_request_body");
+  }
+
   // Note: In a real app, you'd want to handle these enums more gracefully.
   let person_type: auth_types::PersonType =
-    serde_json::from_str(&format!("\"{}\"", payload.person_type))
-      .unwrap_or(auth_types::PersonType::N);
+    match serde_json::from_str(&format!("\"{}\"", payload.person_type.trim())) {
+      Ok(value) => value,
+      Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
+    };
   let document_type: auth_types::DocumentType =
-    serde_json::from_str(&format!("\"{}\"", payload.document_type))
-      .unwrap_or(auth_types::DocumentType::DNI);
+    match serde_json::from_str(&format!("\"{}\"", payload.document_type.trim())) {
+      Ok(value) => value,
+      Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
+    };
 
   match sqlx::query_as::<_, User>(
     "SELECT id, username, name FROM auth.create_person($1, $2, $3, $4, $5, $6)",
