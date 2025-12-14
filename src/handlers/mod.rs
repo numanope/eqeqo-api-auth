@@ -15,6 +15,20 @@ pub(super) fn error_response(status_code: StatusCode, message: &str) -> Response
   }
 }
 
+pub(super) fn error_response_with_detail(
+  status_code: StatusCode,
+  message: &str,
+  detail: &str,
+) -> Response {
+  Response {
+    status: status_code.to_string(),
+    content_type: "application/json".to_string(),
+    content: json!({ "error": message, "detail": detail })
+      .to_string()
+      .into_bytes(),
+  }
+}
+
 fn extract_token(req: &Request) -> Option<String> {
   req
     .headers
@@ -25,7 +39,14 @@ fn extract_token(req: &Request) -> Option<String> {
 }
 
 pub(super) fn unauthorized_response(message: &str) -> Response {
-  error_response(StatusCode::Unauthorized, message)
+  let detail = match message {
+    "missing_token_header" => "header token ausente o vacío; envía token: <valor> en cada petición",
+    "invalid_token" => "token inválido o revocado; realiza login para obtener uno nuevo",
+    "expired_token" => "token expirado; solicita un token nuevo iniciando sesión",
+    "invalid_credentials" => "usuario o contraseña incorrectos",
+    _ => "solicitud no autorizada",
+  };
+  error_response_with_detail(StatusCode::Unauthorized, message, detail)
 }
 
 fn current_epoch() -> i64 {
