@@ -297,3 +297,34 @@ pub use relations::*;
 pub use roles::*;
 pub use services::*;
 pub use users::*;
+
+pub(super) async fn resolve_permission_id(
+  db: &DB,
+  identifier: &FlexibleId,
+) -> Result<i32, Response> {
+  if let Some(id) = identifier.parse_int() {
+    return Ok(id);
+  }
+
+  let name = identifier
+    .as_str()
+    .map(|s| s.trim())
+    .filter(|s| !s.is_empty())
+    .ok_or_else(|| error_response(StatusCode::BadRequest, "invalid_permission_id"))?;
+
+  match sqlx::query_scalar::<_, i32>("SELECT id FROM auth.permission WHERE name = $1")
+    .bind(name)
+    .fetch_optional(db.pool())
+    .await
+  {
+    Ok(Some(id)) => Ok(id),
+    Ok(None) => Err(error_response(
+      StatusCode::BadRequest,
+      "permission_not_found",
+    )),
+    Err(_) => Err(error_response(
+      StatusCode::InternalServerError,
+      "resolve_permission_failed",
+    )),
+  }
+}

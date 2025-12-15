@@ -5,7 +5,8 @@ use serde_json::json;
 use super::roles::Role;
 use super::users::User;
 use super::{
-  FlexibleId, error_response, require_token_with_renew, resolve_person_id, resolve_service_id,
+  FlexibleId, error_response, require_token_with_renew, resolve_permission_id, resolve_person_id,
+  resolve_service_id,
 };
 
 #[derive(Deserialize)]
@@ -325,5 +326,149 @@ pub async fn check_person_permission_in_service(req: &Request) -> Response {
         .into_bytes(),
     },
     Err(_) => error_response(StatusCode::InternalServerError, "check_permission_failed"),
+  }
+}
+
+#[derive(Deserialize)]
+pub struct PersonServicePermissionPayload {
+  person_id: FlexibleId,
+  service_id: FlexibleId,
+  permission_id: Option<FlexibleId>,
+  permission_name: Option<String>,
+}
+
+async fn ensure_direct_role(
+  db: &crate::database::DB,
+  person_id: i32,
+  service_id: i32,
+) -> Result<i32, Response> {
+  let role_name = format!("direct:{}:{}", person_id, service_id);
+
+  let existing = sqlx::query_scalar::<_, i32>("SELECT id FROM auth.role WHERE name = $1")
+    .bind(&role_name)
+    .fetch_optional(db.pool())
+    .await
+    .map_err(|_| {
+      error_response(
+        StatusCode::InternalServerError,
+        "resolve_direct_role_failed",
+      )
+    })?;
+  if let Some(id) = existing {
+    return Ok(id);
+  }
+
+  let inserted = sqlx::query_scalar::<_, i32>(
+    "INSERT INTO auth.role (name) VALUES ($1)
+      ON CONFLICT (name) DO NOTHING
+      RETURNING id",
+  )
+  .bind(&role_name)
+  .fetch_optional(db.pool())
+  .await
+  .map_err(|_| error_response(StatusCode::InternalServerError, "create_direct_role_failed"))?;
+
+  if let Some(id) = inserted {
+    return Ok(id);
+  }
+
+  sqlx::query_scalar::<_, i32>("SELECT id FROM auth.role WHERE name = $1")
+    .bind(&role_name)
+    .fetch_one(db.pool())
+    .await
+    .map_err(|_| {
+      error_response(
+        StatusCode::InternalServerError,
+        "resolve_direct_role_failed",
+      )
+    })
+}
+
+pub async fn grant_permission_to_person_in_service(req: &Request) -> Response {
+  let (db, _, _) = match require_token_with_renew(req).await {
+    Ok(tuple) => tuple,
+    Err(response) => return response,
+  };
+
+  let payload: PersonServicePermissionPayload = match serde_json::from_slice(req.body.as_bytes()) {
+    Ok(p) => p,
+    Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
+  };
+
+  let person_id = match resolve_person_id(&db, &payload.person_id).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+
+  let service_id = match resolve_service_id(&db, &payload.service_id, false).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+
+  let permission_identifier = match (payload.permission_id, payload.permission_name) {
+    (Some(id), _) => id,
+    (None, Some(name)) => FlexibleId::from(name),
+    _ => return error_response(StatusCode::BadRequest, "invalid_request_body"),
+  };
+
+  let permission_id = match resolve_permission_id(&db, &permission_identifier).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+
+  let role_id = match ensure_direct_role(&db, person_id, service_id).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+
+  if let Err(_) = sqlx::query(
+    "INSERT INTO auth.service_roles (service_id, role_id) VALUES ($1, $2)
+      ON CONFLICT (service_id, role_id) DO NOTHING",
+  )
+  .bind(service_id)
+  .bind(role_id)
+  .execute(db.pool())
+  .await
+  {
+    return error_response(StatusCode::InternalServerError, "link_role_service_failed");
+  }
+
+  if let Err(_) = sqlx::query(
+    "INSERT INTO auth.role_permission (role_id, permission_id) VALUES ($1, $2)
+      ON CONFLICT (role_id, permission_id) DO NOTHING",
+  )
+  .bind(role_id)
+  .bind(permission_id)
+  .execute(db.pool())
+  .await
+  {
+    return error_response(StatusCode::InternalServerError, "assign_permission_failed");
+  }
+
+  if let Err(_) = sqlx::query(
+    "INSERT INTO auth.person_service_role (person_id, service_id, role_id) VALUES ($1, $2, $3)
+      ON CONFLICT (person_id, service_id, role_id) DO NOTHING",
+  )
+  .bind(person_id)
+  .bind(service_id)
+  .bind(role_id)
+  .execute(db.pool())
+  .await
+  {
+    return error_response(StatusCode::InternalServerError, "assign_role_person_failed");
+  }
+
+  Response {
+    status: StatusCode::Ok.to_string(),
+    content_type: "application/json".to_string(),
+    content: json!({
+      "status": "permission_granted",
+      "person_id": person_id,
+      "service_id": service_id,
+      "permission_id": permission_id,
+      "role_id": role_id
+    })
+    .to_string()
+    .into_bytes(),
   }
 }

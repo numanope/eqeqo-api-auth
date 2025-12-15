@@ -156,6 +156,11 @@ pub async fn create_server(server_url: &str) -> Server {
     handler!(remove_role_from_person_in_service),
   );
   server.add_route(
+    "/person-service-permissions",
+    Rt::POST,
+    handler!(grant_permission_to_person_in_service),
+  );
+  server.add_route(
     "/people/{person_id}/services/{service_id}/roles",
     Rt::GET,
     handler!(list_person_roles_in_service),

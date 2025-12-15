@@ -2009,6 +2009,75 @@ async fn test_person_service_roles_assign_success() {
 }
 
 #[tokio::test]
+async fn test_person_service_permission_assign_success() {
+  boot_server().await;
+  let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\",\"service_id\":\"Service A\"}";
+  let expected = b"\"token\"";
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
+  let token = login_response
+    .split("\"token\":\"")
+    .nth(1)
+    .and_then(|segment| segment.split('"').next())
+    .expect("token value")
+    .to_string();
+
+  let suffix_user = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_nanos();
+  let username = format!("psp_user_{}", suffix_user);
+  let password = format!("psp_pass_{}", suffix_user);
+  let document = format!("{}{}", suffix_user, 11);
+  let create_user_request = format!(
+    "POST /users HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"username\":\"{uname}\",\"password_hash\":\"{pwd}\",\"name\":\"PSP User\",\"person_type\":\"N\",\"document_type\":\"DNI\",\"document_number\":\"{doc}\"}}",
+    token,
+    uname = username,
+    pwd = password,
+    doc = document
+  );
+  let request = create_user_request.as_bytes();
+  let expected = b"\"id\"";
+  let user_response = run_test(request, expected, Some(SERVER_URL)).await;
+  let user_id = user_response
+    .split("\"id\":")
+    .nth(1)
+    .and_then(|segment| segment.split(|c| c == ',' || c == '}').next())
+    .expect("user id segment")
+    .trim()
+    .to_string();
+
+  let suffix_permission = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_nanos();
+  let permission_name = format!("psp_permission_{}", suffix_permission);
+  let create_permission_request = format!(
+    "POST /permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"name\":\"{}\"}}",
+    token, permission_name
+  );
+  let request = create_permission_request.as_bytes();
+  let expected = b"\"id\"";
+  run_test(request, expected, Some(SERVER_URL)).await;
+
+  let grant_request = format!(
+    "POST /person-service-permissions HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"person_id\":{},\"service_id\":\"Service A\",\"permission_name\":\"{}\"}}",
+    token, user_id, permission_name
+  );
+  let request = grant_request.as_bytes();
+  let expected = b"\"status\":\"permission_granted\"";
+  run_test(request, expected, Some(SERVER_URL)).await;
+}
+
+#[tokio::test]
+async fn test_person_service_permission_missing_token() {
+  boot_server().await;
+  let request =
+    b"POST /person-service-permissions HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}";
+  let expected = b"missing_token_header";
+  run_test(request, expected, Some(SERVER_URL)).await;
+}
+
+#[tokio::test]
 async fn test_person_service_roles_assign_missing_token() {
   boot_server().await;
   let request = b"POST /person-service-roles HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}";
