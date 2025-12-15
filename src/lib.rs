@@ -1,8 +1,12 @@
+use crate::auth::TokenManager;
+use crate::database::DB;
 use crate::handlers::*;
 pub mod auth;
 mod database;
 mod handlers;
 pub use httpageboy::{Request, Response, Rt, Server, StatusCode, handler};
+use std::sync::OnceLock;
+use tokio::time::{self, Duration};
 
 pub mod test_utils {
   pub use httpageboy::test_utils::{run_test, setup_test_server};
@@ -45,12 +49,36 @@ fn build_cors_policy() -> httpageboy::CorsPolicy {
   policy
 }
 
+static CLEANUP_JOB_STARTED: OnceLock<()> = OnceLock::new();
+
+fn spawn_cleanup_job() {
+  if CLEANUP_JOB_STARTED.set(()).is_err() {
+    return;
+  }
+  tokio::spawn(async move {
+    let mut ticker = time::interval(Duration::from_secs(60));
+    loop {
+      ticker.tick().await;
+      match DB::new().await {
+        Ok(db) => {
+          let manager = TokenManager::new(db.pool());
+          if let Err(err) = manager.cleanup_expired().await {
+            eprintln!("[cleanup] token cleanup failed: {}", err);
+          }
+        }
+        Err(err) => eprintln!("[cleanup] db unavailable: {}", err),
+      }
+    }
+  });
+}
+
 pub async fn create_server(server_url: &str) -> Server {
   let mut server = Server::new(server_url, None)
     .await
     .expect("Failed to create server");
 
   server.set_cors(build_cors_policy());
+  spawn_cleanup_job();
 
   server.add_route("/", Rt::GET, handler!(home));
 

@@ -44,6 +44,12 @@ pub(super) fn unauthorized_response(message: &str) -> Response {
     "invalid_token" => "token inválido o revocado; realiza login para obtener uno nuevo",
     "expired_token" => "token expirado; solicita un token nuevo iniciando sesión",
     "invalid_credentials" => "usuario o contraseña incorrectos",
+    "service_access_denied" => {
+      "el usuario no tiene acceso al servicio solicitado; verifica la asignación de roles"
+    }
+    "service_mismatch" => {
+      "el token pertenece a otro servicio; solicita un token específico para ese cliente"
+    }
     _ => "solicitud no autorizada",
   };
   error_response_with_detail(StatusCode::Unauthorized, message, detail)

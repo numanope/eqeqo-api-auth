@@ -34,7 +34,7 @@ TOKEN_RENEW_THRESHOLD_SECONDS=30
 
 | Method | Path | Description |
 | ------ | ---- | ----------- |
-| **POST** | `/auth/login` | Generate a new token for valid user |
+| **POST** | `/auth/login` | Generate a new token for valid user (requires `username`, `password`, and `service_id`/`service` name) |
 | **POST** | `/auth/logout` | Revoke token (delete from cache) — requires `token:` header |
 | **GET** | `/auth/profile` | Validate token and return user payload (renews if valid) — requires `token:` header |
 | **POST** | `/check-token` | Validate token from another API (atomic renewal logic) — requires `token:` header |
@@ -54,11 +54,14 @@ TOKEN_RENEW_THRESHOLD_SECONDS=30
 ## 🔁 Token logic
 - Generated at login (`hash(secret + random + timestamp)`). NO JWT nor similar.
 - Stored centrally in `auth.tokens_cache` with `payload` and `modified_at`.
+- Tokens are issued per **user + service**; login requests must include the target service id or name. Tokens cannot be reused across services.
 - All protected requests must include `token:` header (no query params). `/auth/login` is the only public route.
 - Short TTL (2–5 min) with atomic renewal near expiry to avoid contention.
 - Revocation on logout or user deletion; cleanup job periodically removes expired tokens.
+- `/check-token` can optionally validate both user and service to avoid cross-service leaks.
 - No tokens in URLs.
 - Minimal logging per request: token, endpoint, timestamp, IP.
+- Background cleanup job trims expired tokens every ~60 seconds.
 
 
 ## 🧭 Use case diagram
