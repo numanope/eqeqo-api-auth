@@ -34,10 +34,10 @@ TOKEN_RENEW_THRESHOLD_SECONDS=30
 
 | Method | Path | Description (minimal example) |
 | ------ | ---- | ----------------------------- |
-| **POST** | `/auth/login` | Issue token per user+service. Example: `{"username":"adm1","password":"adm1-hash","service_id":"Service A"}` |
+| **POST** | `/auth/login` | Issue token for user (global). Example: `{"username":"adm1","password":"adm1-hash"}` |
 | **POST** | `/auth/logout` | Revoke current token. Header: `token: <value>` |
 | **GET** | `/auth/profile` | Validate and optionally renew token. Header: `token: <value>` |
-| **POST** | `/check-token` | Validate token (optional `service_id` / `user_id` in body to enforce match). Header: `token: <value>` |
+| **POST** | `/check-token` | Validate token (optional `user_id` in body to enforce match). Header: `token: <value>` |
 | **GET** | `/users` | List users. Header: `token: <value>` |
 | **POST** | `/users` | Create user. Example body: `{"username":"user1","password_hash":"pass","name":"User","person_type":"N","document_type":"DNI","document_number":"123"}` + header `token`. |
 | **PUT** | `/users/{id}` | Update user. Example: `{"name":"New Name"}` + header `token`. |
@@ -66,18 +66,18 @@ TOKEN_RENEW_THRESHOLD_SECONDS=30
 | **GET** | `/people/{person_id}/services/{service_id}/roles` | List roles of person in service. Header: `token`. |
 | **GET** | `/services/{service_id}/roles/{role_id}/people` | List people with role in service. Header: `token`. |
 | **GET** | `/people/{person_id}/services` | List services of a person. Header: `token`. |
-| **GET** | `/check-permission` | Check permission for a person in a service. Example body: `{"person_id":1,"service_id":1,"permission_name":"read"}` + header `token`. |
+| **GET** | `/people/{person_id}/services/{service_id}` | Get user data plus roles/permissions for that service (may be empty). Header: `token`. |
 | **POST** | `/person-service-permissions` | Grant a permission directly to a person in a service (creates/uses a scoped role). Example: `{"person_id":1,"service_id":1,"permission_name":"read"}` + header `token`. |
 
 
 ## 🔁 Token logic
 - Generated at login (`hash(secret + random + timestamp)`). NO JWT nor similar.
 - Stored centrally in `auth.tokens_cache` with `payload` and `modified_at`.
-- Tokens are issued per **user + service**; login requests must include the target service id or name. Tokens cannot be reused across services.
+- Tokens are issued per **user** (global); services query permissions by sending `token:` + `person_id` + `service_id` to `/people/{person_id}/services/{service_id}`.
 - All protected requests must include `token:` header (no query params). `/auth/login` is the only public route.
 - Short TTL (2–5 min) with atomic renewal near expiry to avoid contention.
 - Revocation on logout or user deletion; cleanup job periodically removes expired tokens.
-- `/check-token` can optionally validate both user and service to avoid cross-service leaks.
+- `/check-token` can optionally validate user to avoid token misuse.
 - No tokens in URLs.
 - Minimal logging per request: token, endpoint, timestamp, IP.
 - Background cleanup job trims expired tokens every ~60 seconds.

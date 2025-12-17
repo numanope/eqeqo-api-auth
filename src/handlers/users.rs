@@ -5,7 +5,7 @@ use serde_json::json;
 
 use super::{
   FlexibleId, error_response, get_db_connection, log_access, require_token_with_renew,
-  resolve_service_id, unauthorized_response, with_auth, with_auth_no_renew,
+  unauthorized_response, with_auth, with_auth_no_renew,
 };
 
 // Basic endpoints
@@ -21,8 +21,6 @@ pub async fn home(_req: &Request) -> Response {
 pub struct LoginPayload {
   username: String,
   password: String,
-  #[serde(alias = "service")]
-  service_id: FlexibleId,
 }
 
 #[derive(sqlx::FromRow)]
@@ -31,88 +29,6 @@ struct AuthUser {
   username: String,
   password_hash: String,
   name: String,
-}
-
-#[derive(Debug)]
-struct ServiceAccess {
-  id: i32,
-  name: String,
-  roles: Vec<String>,
-  permissions: Vec<String>,
-}
-
-async fn fetch_service_access(
-  db: &crate::database::DB,
-  person_id: i32,
-  service_identifier: &FlexibleId,
-) -> Result<ServiceAccess, Response> {
-  let service_id = match resolve_service_id(db, service_identifier, false).await {
-    Ok(id) => id,
-    Err(response) => return Err(response),
-  };
-
-  let service_name =
-    match sqlx::query_scalar::<_, String>("SELECT name FROM auth.services WHERE id = $1")
-      .bind(service_id)
-      .fetch_optional(db.pool())
-      .await
-    {
-      Ok(Some(name)) => name,
-      Ok(None) => return Err(error_response(StatusCode::BadRequest, "invalid_service_id")),
-      Err(_) => {
-        return Err(error_response(
-          StatusCode::InternalServerError,
-          "resolve_service_failed",
-        ));
-      }
-    };
-
-  let roles = match sqlx::query_scalar::<_, String>(
-    "SELECT r.name FROM auth.person_service_role psr
-      JOIN auth.role r ON r.id = psr.role_id
-      WHERE psr.person_id = $1 AND psr.service_id = $2",
-  )
-  .bind(person_id)
-  .bind(service_id)
-  .fetch_all(db.pool())
-  .await
-  {
-    Ok(list) if !list.is_empty() => list,
-    Ok(_) => return Err(unauthorized_response("service_access_denied")),
-    Err(_) => {
-      return Err(error_response(
-        StatusCode::InternalServerError,
-        "load_roles_failed",
-      ));
-    }
-  };
-
-  let permissions = match sqlx::query_scalar::<_, String>(
-    "SELECT DISTINCT p.name FROM auth.person_service_role psr
-      JOIN auth.role_permission rp ON rp.role_id = psr.role_id
-      JOIN auth.permission p ON p.id = rp.permission_id
-      WHERE psr.person_id = $1 AND psr.service_id = $2",
-  )
-  .bind(person_id)
-  .bind(service_id)
-  .fetch_all(db.pool())
-  .await
-  {
-    Ok(list) => list,
-    Err(_) => {
-      return Err(error_response(
-        StatusCode::InternalServerError,
-        "load_permissions_failed",
-      ));
-    }
-  };
-
-  Ok(ServiceAccess {
-    id: service_id,
-    name: service_name,
-    roles,
-    permissions,
-  })
 }
 
 pub async fn login(req: &Request) -> Response {
@@ -147,19 +63,10 @@ pub async fn login(req: &Request) -> Response {
     return unauthorized_response("invalid_credentials");
   }
 
-  let service_access = match fetch_service_access(&db, user.id, &payload.service_id).await {
-    Ok(access) => access,
-    Err(response) => return response,
-  };
-
   let user_payload = json!({
     "user_id": user.id,
     "username": user.username,
     "name": user.name,
-    "service_id": service_access.id,
-    "service_name": service_access.name,
-    "roles": service_access.roles,
-    "permissions": service_access.permissions,
   });
 
   let manager = TokenManager::new(db.pool());
@@ -221,7 +128,6 @@ pub async fn profile(req: &Request) -> Response {
 pub async fn check_token(req: &Request) -> Response {
   #[derive(Deserialize)]
   struct CheckTokenRequest {
-    service_id: Option<FlexibleId>,
     user_id: Option<FlexibleId>,
   }
 
@@ -233,30 +139,12 @@ pub async fn check_token(req: &Request) -> Response {
 
   with_auth(req, true, move |_req, _db, validation, _token| async move {
     let payload = validation.record.payload.clone();
-    let token_service_id = payload
-      .get("service_id")
-      .and_then(|value| value.as_i64())
-      .map(|v| v as i32);
     let token_user_id = payload
       .get("user_id")
       .and_then(|value| value.as_i64())
       .map(|v| v as i32);
 
     if let Some(checks) = &body_checks {
-      if let Some(service_identifier) = checks.service_id.as_ref() {
-        if let (Some(expected), Some(actual)) = (service_identifier.parse_int(), token_service_id) {
-          if expected != actual {
-            return unauthorized_response("service_mismatch");
-          }
-        } else if let (Some(expected_name), Some(actual_name)) = (
-          service_identifier.as_str(),
-          payload.get("service_name").and_then(|value| value.as_str()),
-        ) {
-          if !expected_name.eq_ignore_ascii_case(actual_name) {
-            return unauthorized_response("service_mismatch");
-          }
-        }
-      }
       if let (Some(expected), Some(actual)) = (
         checks.user_id.as_ref().and_then(|id| id.parse_int()),
         token_user_id,

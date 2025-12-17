@@ -170,17 +170,15 @@ pub async fn create_server(server_url: &str) -> Server {
     Rt::GET,
     handler!(list_persons_with_role_in_service),
   );
-
-  // Other checks
-  server.add_route(
-    "/check-permission",
-    Rt::GET,
-    handler!(check_person_permission_in_service),
-  );
   server.add_route(
     "/people/{person_id}/services",
     Rt::GET,
     handler!(list_services_of_person),
+  );
+  server.add_route(
+    "/people/{person_id}/services/{service_id}",
+    Rt::GET,
+    handler!(get_person_service_info),
   );
 
   server

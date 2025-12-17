@@ -293,40 +293,8 @@ fn parse_check_permission_payload(req: &Request) -> Result<CheckPermissionPayloa
 }
 
 pub async fn check_person_permission_in_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_with_renew(req).await {
-    Ok(tuple) => tuple,
-    Err(response) => return response,
-  };
-  let payload = match parse_check_permission_payload(req) {
-    Ok(payload) => payload,
-    Err(response) => return response,
-  };
-  let person_id = match resolve_person_id(&db, &payload.person_id).await {
-    Ok(id) => id,
-    Err(response) => return response,
-  };
-  let service_id = match resolve_service_id(&db, &payload.service_id, false).await {
-    Ok(id) => id,
-    Err(response) => return response,
-  };
-  match sqlx::query_scalar::<_, bool>(
-    "SELECT * FROM auth.check_person_permission_in_service($1, $2, $3)",
-  )
-  .bind(person_id)
-  .bind(service_id)
-  .bind(payload.permission_name)
-  .fetch_one(db.pool())
-  .await
-  {
-    Ok(has_permission) => Response {
-      status: StatusCode::Ok.to_string(),
-      content_type: "application/json".to_string(),
-      content: json!({ "has_permission": has_permission })
-        .to_string()
-        .into_bytes(),
-    },
-    Err(_) => error_response(StatusCode::InternalServerError, "check_permission_failed"),
-  }
+  let _ = req;
+  error_response(StatusCode::NotFound, "route_removed")
 }
 
 #[derive(Deserialize)]
@@ -467,6 +435,107 @@ pub async fn grant_permission_to_person_in_service(req: &Request) -> Response {
       "service_id": service_id,
       "permission_id": permission_id,
       "role_id": role_id
+    })
+    .to_string()
+    .into_bytes(),
+  }
+}
+
+#[derive(sqlx::FromRow, serde::Serialize)]
+struct PersonData {
+  id: i32,
+  username: String,
+  name: String,
+}
+
+pub async fn get_person_service_info(req: &Request) -> Response {
+  let (db, validation, _) = match require_token_with_renew(req).await {
+    Ok((db, validation, _token)) => (db, validation),
+    Err(response) => return response,
+  };
+
+  let person_identifier = match req.params.get("person_id") {
+    Some(value) => FlexibleId::from(value.clone()),
+    None => return error_response(StatusCode::BadRequest, "invalid_person_id"),
+  };
+
+  let service_identifier = match req.params.get("service_id") {
+    Some(value) => FlexibleId::from(value.clone()),
+    None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
+  };
+
+  let person_id = match resolve_person_id(&db, &person_identifier).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+
+  if let Some(token_user_id) = validation
+    .record
+    .payload
+    .get("user_id")
+    .and_then(|v| v.as_i64())
+  {
+    if token_user_id as i32 != person_id {
+      return error_response(StatusCode::Forbidden, "forbidden_person_lookup");
+    }
+  }
+
+  let service_id = match resolve_service_id(&db, &service_identifier, false).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+
+  let person = match sqlx::query_as::<_, PersonData>(
+    "SELECT id, username, name FROM auth.person WHERE id = $1 AND removed_at IS NULL",
+  )
+  .bind(person_id)
+  .fetch_optional(db.pool())
+  .await
+  {
+    Ok(Some(person)) => person,
+    Ok(None) => return error_response(StatusCode::NotFound, "person_not_found"),
+    Err(_) => return error_response(StatusCode::InternalServerError, "load_person_failed"),
+  };
+
+  let permissions = match sqlx::query_scalar::<_, String>(
+    "SELECT DISTINCT p.name FROM auth.person_service_role psr
+      JOIN auth.role_permission rp ON rp.role_id = psr.role_id
+      JOIN auth.permission p ON p.id = rp.permission_id
+      WHERE psr.person_id = $1 AND psr.service_id = $2",
+  )
+  .bind(person_id)
+  .bind(service_id)
+  .fetch_all(db.pool())
+  .await
+  {
+    Ok(perms) => perms,
+    Err(_) => return error_response(StatusCode::InternalServerError, "load_permissions_failed"),
+  };
+
+  let roles = match sqlx::query_scalar::<_, String>(
+    "SELECT r.name FROM auth.person_service_role psr
+      JOIN auth.role r ON r.id = psr.role_id
+      WHERE psr.person_id = $1 AND psr.service_id = $2",
+  )
+  .bind(person_id)
+  .bind(service_id)
+  .fetch_all(db.pool())
+  .await
+  {
+    Ok(list) => list,
+    Err(_) => {
+      return error_response(StatusCode::InternalServerError, "load_roles_failed");
+    }
+  };
+
+  Response {
+    status: StatusCode::Ok.to_string(),
+    content_type: "application/json".to_string(),
+    content: json!({
+      "user": person,
+      "service_id": service_id,
+      "roles": roles,
+      "permissions": permissions,
     })
     .to_string()
     .into_bytes(),
