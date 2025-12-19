@@ -29,7 +29,7 @@ TOKEN_TTL_SECONDS=300
 TOKEN_RENEW_THRESHOLD_SECONDS=30
 ```
 
-Data reference: see `DB.md` for the seeded demo dataset (IDs, users, services, roles, permissions).
+Data reference: see `./db/DB.md` (seeded dataset: IDs, users, services, roles, permissions).
 
 ## 🔐 Auth essentials
 - All protected routes require the `token:` header (never pass tokens in URLs).
