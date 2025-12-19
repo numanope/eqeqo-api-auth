@@ -8,7 +8,8 @@ INSERT INTO auth.services (name, description)
 VALUES
   ('Service A', 'Demo catalog service'),
   ('Service B', 'Internal billing service'),
-  ('Service C', 'Customer support portal')
+  ('Service C', 'Customer support portal'),
+  ('UI Store', 'Frontend store surface')
 ON CONFLICT (name) DO NOTHING;
 
 -- Roles
@@ -45,7 +46,8 @@ VALUES
   ('usr2', 'usr2-hash', 'User Two', 'N', 'DNI', '00000003'),
   ('usr3', 'usr3-hash', 'User Three', 'N', 'DNI', '00000004'),
   ('editor1', 'editor1-hash', 'Editor One', 'N', 'DNI', '00000005'),
-  ('viewer1', 'viewer1-hash', 'Viewer One', 'N', 'DNI', '00000006')
+  ('viewer1', 'viewer1-hash', 'Viewer One', 'N', 'DNI', '00000006'),
+  ('juan', 'juan-hash', 'Juan Demo', 'N', 'DNI', '00000007')
 ON CONFLICT (username) DO NOTHING;
 
 -- Service roles
@@ -54,7 +56,8 @@ WITH service_role_pairs (service_name, role_name) AS (
     ('Service A', 'Admin'),
     ('Service A', 'User'),
     ('Service B', 'User'),
-    ('Service C', 'Editor')
+    ('Service C', 'Editor'),
+    ('UI Store', 'Viewer')
 )
 INSERT INTO auth.service_roles (service_id, role_id)
 SELECT s.id, r.id
@@ -72,7 +75,8 @@ WITH role_permission_pairs (role_name, permission_name) AS (
     ('Admin', 'delete'),
     ('User', 'read'),
     ('Editor', 'update'),
-    ('Editor', 'read')
+    ('Editor', 'read'),
+    ('Viewer', 'read')
 )
 INSERT INTO auth.role_permission (role_id, permission_id)
 SELECT r.id, p.id
@@ -87,7 +91,8 @@ WITH person_service_role_pairs (username, service_name, role_name) AS (
     ('adm1', 'Service A', 'Admin'),
     ('usr1', 'Service A', 'User'),
     ('usr2', 'Service B', 'User'),
-    ('usr3', 'Service C', 'Editor')
+    ('usr3', 'Service C', 'Editor'),
+    ('juan', 'UI Store', 'Viewer')
 )
 INSERT INTO auth.person_service_role (person_id, service_id, role_id)
 SELECT pe.id, s.id, r.id

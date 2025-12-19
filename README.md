@@ -29,6 +29,8 @@ TOKEN_TTL_SECONDS=300
 TOKEN_RENEW_THRESHOLD_SECONDS=30
 ```
 
+Data reference: see `DB.md` for the seeded demo dataset (IDs, users, services, roles, permissions).
+
 ## 🔐 Auth essentials
 - All protected routes require the `token:` header (never pass tokens in URLs).
 - Tokens are cached centrally in `auth.tokens_cache`; renewal is atomic when near expiry.

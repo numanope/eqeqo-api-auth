@@ -151,6 +151,29 @@ async fn test_check_token_missing_header() {
   run_test(request, expected, Some(SERVER_URL)).await;
 }
 
+#[tokio::test]
+async fn test_check_token_user_mismatch() {
+  boot_server().await;
+  let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
+  let expected = b"\"token\"";
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
+  let token = login_response
+    .split("\"token\":\"")
+    .nth(1)
+    .and_then(|segment| segment.split('"').next())
+    .expect("token value")
+    .to_string();
+
+  let check_body = "{\"user_id\":99999}";
+  let check_request = format!(
+    "POST /check-token HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
+    token, check_body
+  );
+  let request = check_request.as_bytes();
+  let expected = b"invalid_token";
+  run_test(request, expected, Some(SERVER_URL)).await;
+}
+
 // Users
 
 #[tokio::test]
@@ -2959,7 +2982,7 @@ async fn test_person_service_info_success_with_permissions() {
     person_id = user_id,
     token = token
   );
-  let expected = b"\"permissions\"";
+  let expected = b"\"permissions\":[\"read\"";
   run_test(request.as_bytes(), expected, Some(SERVER_URL)).await;
 }
 
