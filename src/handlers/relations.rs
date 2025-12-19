@@ -255,49 +255,6 @@ pub async fn list_persons_with_role_in_service(req: &Request) -> Response {
 }
 
 #[derive(Deserialize)]
-pub struct CheckPermissionPayload {
-  person_id: FlexibleId,
-  service_id: FlexibleId,
-  permission_name: String,
-}
-
-fn parse_check_permission_payload(req: &Request) -> Result<CheckPermissionPayload, Response> {
-  if !req.body.trim().is_empty() {
-    match serde_json::from_slice::<CheckPermissionPayload>(req.body.as_bytes()) {
-      Ok(payload) => return Ok(payload),
-      Err(err) => {
-        eprintln!(
-          "[parse-error] check_permission body='{}' err={}",
-          req.body.replace('\n', "\\n"),
-          err
-        );
-      }
-    }
-  }
-
-  let person_id = req.params.get("person_id").cloned().map(FlexibleId::from);
-  let service_id = req.params.get("service_id").cloned().map(FlexibleId::from);
-  let permission_name = req.params.get("permission_name").cloned();
-
-  match (person_id, service_id, permission_name) {
-    (Some(person_id), Some(service_id), Some(permission_name)) => Ok(CheckPermissionPayload {
-      person_id,
-      service_id,
-      permission_name,
-    }),
-    _ => Err(error_response(
-      StatusCode::BadRequest,
-      "invalid_request_body",
-    )),
-  }
-}
-
-pub async fn check_person_permission_in_service(req: &Request) -> Response {
-  let _ = req;
-  error_response(StatusCode::NotFound, "route_removed")
-}
-
-#[derive(Deserialize)]
 pub struct PersonServicePermissionPayload {
   person_id: FlexibleId,
   service_id: FlexibleId,
