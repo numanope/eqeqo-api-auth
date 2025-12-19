@@ -99,14 +99,21 @@ impl<'a> TokenManager<'a> {
     format!("{:x}", digest)
   }
 
+  fn hash_token_value(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    format!("{:x}", hasher.finalize())
+  }
+
   async fn insert_token(
     &self,
     token: &str,
     payload: &Value,
     modified_at: i64,
   ) -> Result<(), sqlx::Error> {
+    let hashed = Self::hash_token_value(token);
     sqlx::query("INSERT INTO auth.tokens_cache (token, payload, modified_at) VALUES ($1, $2, $3)")
-      .bind(token)
+      .bind(hashed)
       .bind(payload)
       .bind(modified_at)
       .execute(self.pool)
@@ -115,10 +122,11 @@ impl<'a> TokenManager<'a> {
   }
 
   async fn fetch_token(&self, token: &str) -> Result<Option<TokenRecord>, sqlx::Error> {
+    let hashed = Self::hash_token_value(token);
     sqlx::query_as::<_, TokenRecord>(
       "SELECT token, payload, modified_at FROM auth.tokens_cache WHERE token = $1",
     )
-    .bind(token)
+    .bind(hashed)
     .fetch_optional(self.pool)
     .await
   }
@@ -129,11 +137,12 @@ impl<'a> TokenManager<'a> {
     previous_modified_at: i64,
     new_modified_at: i64,
   ) -> Result<Option<TokenRecord>, sqlx::Error> {
+    let hashed = Self::hash_token_value(token);
     sqlx::query_as::<_, TokenRecord>(
       "UPDATE auth.tokens_cache SET modified_at = $1 WHERE token = $2 AND modified_at = $3 RETURNING token, payload, modified_at",
     )
     .bind(new_modified_at)
-    .bind(token)
+    .bind(hashed)
     .bind(previous_modified_at)
     .fetch_optional(self.pool)
     .await
@@ -155,8 +164,9 @@ impl<'a> TokenManager<'a> {
   }
 
   pub async fn delete_token(&self, token: &str) -> Result<bool, sqlx::Error> {
+    let hashed = Self::hash_token_value(token);
     let rows = sqlx::query("DELETE FROM auth.tokens_cache WHERE token = $1")
-      .bind(token)
+      .bind(hashed)
       .execute(self.pool)
       .await?
       .rows_affected();

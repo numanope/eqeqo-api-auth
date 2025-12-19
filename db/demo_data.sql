@@ -41,13 +41,13 @@ INSERT INTO auth.person (
   document_number
 )
 VALUES
-  ('adm1', 'adm1-hash', 'Admin One', 'N', 'DNI', '00000001'),
-  ('usr1', 'usr1-hash', 'User One', 'N', 'DNI', '00000002'),
-  ('usr2', 'usr2-hash', 'User Two', 'N', 'DNI', '00000003'),
-  ('usr3', 'usr3-hash', 'User Three', 'N', 'DNI', '00000004'),
-  ('editor1', 'editor1-hash', 'Editor One', 'N', 'DNI', '00000005'),
-  ('viewer1', 'viewer1-hash', 'Viewer One', 'N', 'DNI', '00000006'),
-  ('juan', 'juan-hash', 'Juan Demo', 'N', 'DNI', '00000007')
+  ('adm1', '$2y$10$BlkGXSHqs7UlEU.nOsTCpeNwDcMbcDatkphwh0zSrz8nNDuwLVkk6', 'Admin One', 'N', 'DNI', '00000001'),
+  ('usr1', '$2y$10$9f9i/MotJh9KDol./GJUFef.TKbxMNCX2JmsK3tctUrqD0F0VJR4i', 'User One', 'N', 'DNI', '00000002'),
+  ('usr2', '$2y$10$wMZn9yjfksl01TU2hl6l0uj.tmW7wLdix6Zfh1/CRCgqClNcCCGWu', 'User Two', 'N', 'DNI', '00000003'),
+  ('usr3', '$2y$10$uYjanE5Ual5x21Yg.cX.SuqF7fhA7Dw.1Itdx5OpgPhMjKj2iBuM.', 'User Three', 'N', 'DNI', '00000004'),
+  ('editor1', '$2y$10$fm3wYlopoUKCkeQBtmTwq.Xl8s08nckqqPy8SLhQv3OPt3IcVWgy2', 'Editor One', 'N', 'DNI', '00000005'),
+  ('viewer1', '$2y$10$C5TXgBV4zcd7Y1Hh4TEAVen8cOVa9HwkCcxWf4OMJmELUrzMLXthe', 'Viewer One', 'N', 'DNI', '00000006'),
+  ('juan', '$2y$10$wIhDH3w2i0JlcHDObQEhWOKo4BqTVkoqLOQCr00FCmXOs.zliMmTW', 'Juan Demo', 'N', 'DNI', '00000007')
 ON CONFLICT (username) DO NOTHING;
 
 -- Service roles

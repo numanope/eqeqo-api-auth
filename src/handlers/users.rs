@@ -1,4 +1,5 @@
 use crate::auth::TokenManager;
+use bcrypt::{hash, verify, DEFAULT_COST};
 use httpageboy::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -31,6 +32,11 @@ struct AuthUser {
   name: String,
 }
 
+fn hash_password(password: &str) -> Result<String, Response> {
+  hash(password, DEFAULT_COST)
+    .map_err(|_| error_response(StatusCode::InternalServerError, "hash_password_failed"))
+}
+
 pub async fn login(req: &Request) -> Response {
   let payload: LoginPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
@@ -59,8 +65,9 @@ pub async fn login(req: &Request) -> Response {
     }
   };
 
-  if user.password_hash != payload.password {
-    return unauthorized_response("invalid_credentials");
+  match verify(&payload.password, &user.password_hash) {
+    Ok(true) => {}
+    _ => return unauthorized_response("invalid_credentials"),
   }
 
   let user_payload = json!({
@@ -222,11 +229,16 @@ pub async fn create_user(req: &Request) -> Response {
       Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
     };
 
+  let password_hash = match hash_password(&payload.password_hash) {
+    Ok(hashed) => hashed,
+    Err(resp) => return resp,
+  };
+
   match sqlx::query_as::<_, User>(
     "SELECT id, username, name FROM auth.create_person($1, $2, $3, $4, $5, $6)",
   )
   .bind(payload.username)
-  .bind(payload.password_hash)
+  .bind(password_hash)
   .bind(payload.name)
   .bind(person_type)
   .bind(document_type)
@@ -305,10 +317,19 @@ pub async fn update_user(req: &Request) -> Response {
     Ok(p) => p,
     Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
   };
+
+  let hashed_password = match payload.password_hash {
+    Some(ref pw) => match hash_password(pw) {
+      Ok(hashed) => Some(hashed),
+      Err(resp) => return resp,
+    },
+    None => None,
+  };
+
   match sqlx::query("CALL auth.update_person($1, $2, $3, $4)")
     .bind(id)
     .bind(payload.username)
-    .bind(payload.password_hash)
+    .bind(hashed_password)
     .bind(payload.name)
     .execute(db.pool())
     .await
