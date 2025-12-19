@@ -1,7 +1,7 @@
 # EQEQO Auth API
 
 Centralized authentication and authorization service for the **Eqeqo** ecosystem.
-Handles token issuance, validation, and access control for all other APIs.
+Issues short-lived tokens, renews them atomically near expiry, and enforces access control with a DB-backed token cache plus periodic cleanup.
 
 
 ## ⚙️ Setup
@@ -14,11 +14,11 @@ cargo run
 ```
 
 **Tests**
-Tests assume the seeded `auth_api` database from `db/run_all.sql`.
-Server default: `http://127.0.0.1:7878`
+Integration tests rely on the seeded `auth_api` DB from `db/run_all.sql`.
+Default server: `http://127.0.0.1:7878`
 
 ```bash
-cargo test
+cargo test --test api_test
 ```
 
 Environment:
@@ -28,6 +28,23 @@ SERVER_PORT=7878
 TOKEN_TTL_SECONDS=300
 TOKEN_RENEW_THRESHOLD_SECONDS=30
 ```
+
+## 🔐 Auth essentials
+- All protected routes require the `token:` header (never pass tokens in URLs).
+- Tokens are cached centrally in `auth.tokens_cache`; renewal is atomic when near expiry.
+- Logout or user deletion revokes related tokens; a background job prunes expired tokens every ~60 seconds.
+- Minimal logging per request records token, endpoint, timestamp, and IP.
+
+## 🚀 Quick request example
+Example: fetching user data for “Juan” (id `7`) from client `servcli1` using an arbitrary token:
+
+```bash
+curl -X GET "http://127.0.0.1:7878/users/7" \
+  -H "token: tok_example_123" \
+  -H "x-client-id: servcli1"
+```
+
+`x-client-id` is optional metadata; the API currently only enforces the `token` header.
 
 
 ## 🧩 Endpoints

@@ -188,7 +188,11 @@ impl<'a> TokenManager<'a> {
   }
 
   fn should_renew(&self, modified_at: i64, now: i64) -> bool {
-    now - modified_at >= self.config.renew_threshold_seconds
+    if self.config.renew_threshold_seconds <= 0 {
+      return false;
+    }
+    let expires_at = self.compute_expires_at(modified_at);
+    expires_at - now <= self.config.renew_threshold_seconds
   }
 
   pub async fn validate_token(

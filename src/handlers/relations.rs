@@ -450,7 +450,7 @@ struct PersonData {
 
 pub async fn get_person_service_info(req: &Request) -> Response {
   let (db, validation, _) = match require_token_with_renew(req).await {
-    Ok((db, validation, _token)) => (db, validation),
+    Ok(result) => result,
     Err(response) => return response,
   };
 
