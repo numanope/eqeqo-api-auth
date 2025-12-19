@@ -37,6 +37,7 @@ Pre-seeded data loaded by `db/run_all.sql` (IDs are deterministic because the DB
 | 5  | editor1  | Editor One  | DNI 00000005 |
 | 6  | viewer1  | Viewer One  | DNI 00000006 |
 | 7  | juan     | Juan Demo   | DNI 00000007 |
+Passwords: stored as bcrypt hashes; for demo users the plaintext is `<username>-hash` (e.g., adm1-hash).
 
 ## Service ↔ Role links (`auth.service_roles`)
 | service_id | role_id | meaning                 |

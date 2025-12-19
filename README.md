@@ -36,6 +36,7 @@ Data reference: see `./db/DB.md` (seeded dataset: IDs, users, services, roles, p
 - Tokens are cached centrally in `auth.tokens_cache`; renewal is atomic when near expiry.
 - Logout or user deletion revokes related tokens; a background job prunes expired tokens every ~60 seconds.
 - Minimal logging per request records token, endpoint, timestamp, and IP.
+- Tokens are stored hashed in the cache; user passwords are stored as bcrypt hashes (demo users seeded with bcrypt).
 
 ## 🚀 Quick request example
 Example: fetching user data for “Juan” (id `7`) from client `servcli1` using an arbitrary token:
