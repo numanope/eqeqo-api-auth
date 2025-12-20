@@ -92,7 +92,7 @@ curl -X GET "http://127.0.0.1:7878/users/7" \
 
 ## 🔁 Token logic
 - Generated at login (`hash(secret + random + timestamp)`). NO JWT nor similar.
-- Stored centrally in `auth.tokens_cache` with `payload` and `modified_at`.
+- Stored centrally in `auth.tokens_cache` with `payload` and `modified_at`; token values are stored hashed (no plaintext).
 - Tokens are issued per **user** (global); services query permissions by sending `token:` + `person_id` + `service_id` to `/people/{person_id}/services/{service_id}`.
 - All protected requests must include `token:` header (no query params). `/auth/login` is the only public route.
 - Short TTL (2–5 min) with atomic renewal near expiry to avoid contention.
@@ -123,11 +123,11 @@ sequenceDiagram
   alt Valid local cache (<= 1 min)
     BACK-->>UI: responds using cached payload
   else Expired or missing cache, valid token in Out
-    BACK->>AUTH: POST /check-token\n{ token, service_id, user_id }
+    BACK->>AUTH: POST /check-token\n{ token, service_id, user_id } (token header, hashed in cache)
     AUTH-->>BACK: { valid: true, payload }
     BACK-->>UI: responds and saves payload in cache (1 min)
   else Expired or missing cache, invalid token in Out
-    BACK->>AUTH: POST /check-token\n{ token, service_id, user_id }
+    BACK->>AUTH: POST /check-token\n{ token, service_id, user_id } (token header, hashed in cache)
     AUTH-->>BACK: { valid: false }
     BACK-->>UI: 401 Unauthorized
   end
