@@ -3245,11 +3245,30 @@ async fn test_person_service_info_empty_permissions() {
     .trim()
     .to_string();
 
+  let login_user_request = format!(
+    "POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{{\"username\":\"{uname}\",\"password\":\"{pwd}\"}}",
+    uname = username,
+    pwd = password
+  );
+  let expected = b"\"token\"";
+  let user_login_response = run_test(
+    login_user_request.as_bytes(),
+    expected,
+    Some(SERVER_URL),
+  )
+  .await;
+  let user_token = user_login_response
+    .split("\"token\":\"")
+    .nth(1)
+    .and_then(|segment| segment.split('\"').next())
+    .expect("token value")
+    .to_string();
+
   let request = format!(
     "GET /people/{person_id}/services/{service_id} HTTP/1.1\r\ntoken: {token}\r\n\r\n",
     person_id = user_id,
     service_id = service_id,
-    token = token
+    token = user_token
   );
   let expected = b"\"permissions\":[]";
   run_test(request.as_bytes(), expected, Some(SERVER_URL)).await;

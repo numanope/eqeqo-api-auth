@@ -455,10 +455,14 @@ pub async fn get_person_service_info(req: &Request) -> Response {
   };
 
   let permissions = match sqlx::query_scalar::<_, String>(
-    "SELECT DISTINCT p.name FROM auth.person_service_role psr
+    "SELECT name FROM (
+      SELECT DISTINCT p.id, p.name
+      FROM auth.person_service_role psr
       JOIN auth.role_permission rp ON rp.role_id = psr.role_id
       JOIN auth.permission p ON p.id = rp.permission_id
-      WHERE psr.person_id = $1 AND psr.service_id = $2",
+      WHERE psr.person_id = $1 AND psr.service_id = $2
+    ) perms
+    ORDER BY id",
   )
   .bind(person_id)
   .bind(service_id)
