@@ -14,7 +14,7 @@ cargo run
 ```
 
 **Tests**
-Integration tests rely on the seeded `auth_api` DB from `db/run_all.sql`.
+Integration tests rely on the seeded `api_auth` DB from `db/run_all.sql`.
 Default server: `http://127.0.0.1:7878`
 
 ```bash
@@ -23,7 +23,7 @@ cargo test --test api_test
 
 Environment:
 ```
-DATABASE_URL=postgres://USER:PASSWORD@HOST/auth_api
+DATABASE_URL=postgres://USER:PASSWORD@HOST/api_auth
 SERVER_PORT=7878
 TOKEN_TTL_SECONDS=300
 TOKEN_RENEW_THRESHOLD_SECONDS=30

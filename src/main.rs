@@ -1,4 +1,4 @@
-use auth_api::create_server;
+use api_auth::create_server;
 
 #[tokio::main]
 async fn main() {

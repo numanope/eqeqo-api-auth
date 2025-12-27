@@ -1,5 +1,19 @@
 -- Main Schema for the Authentication and Authorization API
 
+-- Role and permissions for local development/tests.
+DO
+$$
+BEGIN
+	IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'admin') THEN
+		CREATE ROLE admin LOGIN PASSWORD 'admin';
+	ELSE
+		ALTER ROLE admin WITH LOGIN PASSWORD 'admin';
+	END IF;
+END;
+$$;
+
+GRANT ALL PRIVILEGES ON DATABASE api_auth TO admin;
+
 -- Schema
 CREATE SCHEMA IF NOT EXISTS auth;
 
@@ -149,3 +163,7 @@ CREATE TRIGGER trg_auth_tokens_cache_audit
 BEFORE INSERT OR UPDATE ON auth.tokens_cache
 FOR EACH ROW
 EXECUTE FUNCTION auth.set_epoch_audit_fields();
+
+GRANT USAGE ON SCHEMA auth TO admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA auth TO admin;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA auth TO admin;

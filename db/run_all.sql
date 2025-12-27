@@ -1,12 +1,12 @@
 \echo 'Connecting to postgres database...'
 \c postgres;
 
-\echo 'Recreating auth_api database...'
-DROP DATABASE IF EXISTS auth_api;
-CREATE DATABASE auth_api;
+\echo 'api_auth...'
+DROP DATABASE IF EXISTS api_auth;
+CREATE DATABASE api_auth;
 
-\echo 'Switching connection to auth_api...'
-\c auth_api;
+\echo 'Switching connection to api_auth...'
+\c api_auth;
 
 \echo 'Loading database structure...'
 \ir structure.sql

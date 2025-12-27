@@ -1,4 +1,4 @@
-use auth_api::{
+use api_auth::{
   Server, create_server,
   test_utils::{run_test, setup_test_server},
 };

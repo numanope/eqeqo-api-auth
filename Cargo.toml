@@ -1,5 +1,5 @@
 [package]
-name = "auth_api"
+name = "api_auth"
 version = "0.0.1"
 edition = "2024"
 authors = ["fahedsl <fahedsl@yandex.com>"]
