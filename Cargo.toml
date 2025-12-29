@@ -1,7 +1,7 @@
 [package]
-name = "api-auth"
-version = "0.0.2"
-edition = "2021"
+name = "eqeqo-api-auth"
+version = "0.0.1"
+edition = "2024"
 authors = ["fahedsl <fahedsl@yandex.com>"]
 description = "Centralized authentication and authorization API for multiple independent services. Manages users, roles, permissions, and service associations."
 license = "MIT"
@@ -9,9 +9,9 @@ repository = "https://gitlab.com/numanope/eqeqo/bazoj/auth-api"
 homepage = "https://gitlab.com/numanope/eqeqo/bazoj/auth-api"
 readme = "README.md"
 keywords = ["authentication", "authorization", "api", "users", "roles"]
-documentation = "https://docs.rs/api-auth"
 
 [lib]
+name = "eqeqo_api_auth"
 path = "src/lib.rs"
 
 [dependencies]

@@ -1,4 +1,4 @@
-use api_auth::create_server;
+use eqeqo_api_auth::create_server;
 
 #[tokio::main]
 async fn main() {

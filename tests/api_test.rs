@@ -1,4 +1,4 @@
-use api_auth::{
+use eqeqo_api_auth::{
   Server, create_server,
   test_utils::{run_test, setup_test_server},
 };
