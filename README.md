@@ -23,7 +23,7 @@ cargo test --test api_test
 
 Environment:
 ```
-DATABASE_URL=postgres://USER:PASSWORD@HOST/api_auth
+AUTH_DATABASE_URL=postgres://USER:PASSWORD@HOST/api_auth
 SERVER_PORT=7878
 TOKEN_TTL_SECONDS=300
 TOKEN_RENEW_THRESHOLD_SECONDS=30

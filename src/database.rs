@@ -17,7 +17,8 @@ impl DB {
         // Fallback: intenta cargar .env si aún no se cargó
         let _ = dotenvy::dotenv();
 
-        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let database_url =
+          env::var("AUTH_DATABASE_URL").expect("AUTH_DATABASE_URL must be set");
 
         let max_conns: u32 = env::var("MAX_CONNECTIONS")
           .ok()

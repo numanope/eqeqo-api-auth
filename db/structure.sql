@@ -1,3 +1,26 @@
+-- Global DB and schema setup
+
+-- Ensure admin is superuser
+DO
+$$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'admin') THEN
+    CREATE ROLE admin LOGIN SUPERUSER PASSWORD 'admin';
+  ELSE
+    ALTER ROLE admin WITH LOGIN SUPERUSER PASSWORD 'admin';
+  END IF;
+END;
+$$;
+
+-- Force auth schema as default
+ALTER DATABASE api_auth SET search_path TO auth;
+
+-- Force auth schema for admin
+ALTER ROLE admin SET search_path TO auth;
+
+-- Disable public schema for everyone
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+
 -- Main Schema for the Authentication and Authorization API
 
 -- Role and permissions for local development/tests.
