@@ -1,6 +1,6 @@
 [package]
-name = "api_auth"
-version = "0.0.1"
+name = "api-auth"
+version = "0.0.2"
 edition = "2021"
 authors = ["fahedsl <fahedsl@yandex.com>"]
 description = "Centralized authentication and authorization API for multiple independent services. Manages users, roles, permissions, and service associations."
@@ -9,7 +9,7 @@ repository = "https://gitlab.com/numanope/eqeqo/bazoj/auth-api"
 homepage = "https://gitlab.com/numanope/eqeqo/bazoj/auth-api"
 readme = "README.md"
 keywords = ["authentication", "authorization", "api", "users", "roles"]
-documentation = "https://docs.rs/api_auth"
+documentation = "https://docs.rs/api-auth"
 
 [lib]
 path = "src/lib.rs"
