@@ -125,6 +125,16 @@ CREATE TABLE auth.tokens_cache (
 
 CREATE INDEX idx_auth_tokens_modified_at ON auth.tokens_cache(modified_at);
 
+CREATE TABLE auth.permissions_cache (
+  token TEXT REFERENCES auth.tokens_cache(token) ON DELETE CASCADE NOT NULL,
+  service_id INTEGER REFERENCES auth.services(id) ON DELETE CASCADE NOT NULL,
+  permissions JSONB NOT NULL,
+  modified_at BIGINT NOT NULL,
+  created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  PRIMARY KEY (token, service_id)
+);
+
 CREATE OR REPLACE FUNCTION auth.set_epoch_audit_fields()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -184,6 +194,11 @@ EXECUTE FUNCTION auth.set_epoch_audit_fields();
 
 CREATE TRIGGER trg_auth_tokens_cache_audit
 BEFORE INSERT OR UPDATE ON auth.tokens_cache
+FOR EACH ROW
+EXECUTE FUNCTION auth.set_epoch_audit_fields();
+
+CREATE TRIGGER trg_auth_permissions_cache_audit
+BEFORE INSERT OR UPDATE ON auth.permissions_cache
 FOR EACH ROW
 EXECUTE FUNCTION auth.set_epoch_audit_fields();
 

@@ -138,14 +138,22 @@ impl<'a> TokenManager<'a> {
     new_modified_at: i64,
   ) -> Result<Option<TokenRecord>, sqlx::Error> {
     let hashed = Self::hash_token_value(token);
-    sqlx::query_as::<_, TokenRecord>(
+    let updated = sqlx::query_as::<_, TokenRecord>(
       "UPDATE auth.tokens_cache SET modified_at = $1 WHERE token = $2 AND modified_at = $3 RETURNING token, payload, modified_at",
     )
     .bind(new_modified_at)
-    .bind(hashed)
+    .bind(&hashed)
     .bind(previous_modified_at)
     .fetch_optional(self.pool)
-    .await
+    .await?;
+    if updated.is_some() {
+      sqlx::query("UPDATE auth.permissions_cache SET modified_at = $1 WHERE token = $2")
+        .bind(new_modified_at)
+        .bind(&hashed)
+        .execute(self.pool)
+        .await?;
+    }
+    Ok(updated)
   }
 
   fn compute_expires_at(&self, modified_at: i64) -> i64 {

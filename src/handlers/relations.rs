@@ -1,6 +1,7 @@
 use httpageboy::{Request, Response, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
+use sqlx::types::Json;
 
 use super::roles::Role;
 use super::users::User;
@@ -405,6 +406,12 @@ struct PersonData {
   name: String,
 }
 
+#[derive(sqlx::FromRow)]
+struct PermissionsCacheRow {
+  permissions: Json<Vec<String>>,
+  modified_at: i64,
+}
+
 pub async fn get_person_service_info(req: &Request) -> Response {
   let (db, validation, _) = match require_token_with_renew(req).await {
     Ok(result) => result,
@@ -454,23 +461,68 @@ pub async fn get_person_service_info(req: &Request) -> Response {
     Err(_) => return error_response(StatusCode::InternalServerError, "load_person_failed"),
   };
 
-  let permissions = match sqlx::query_scalar::<_, String>(
-    "SELECT name FROM (
-      SELECT DISTINCT p.id, p.name
-      FROM auth.person_service_role psr
-      JOIN auth.role_permission rp ON rp.role_id = psr.role_id
-      JOIN auth.permission p ON p.id = rp.permission_id
-      WHERE psr.person_id = $1 AND psr.service_id = $2
-    ) perms
-    ORDER BY id",
+  let cached_permissions = match sqlx::query_as::<_, PermissionsCacheRow>(
+    "SELECT permissions, modified_at FROM auth.permissions_cache WHERE token = $1 AND service_id = $2",
   )
-  .bind(person_id)
+  .bind(&validation.record.token)
   .bind(service_id)
-  .fetch_all(db.pool())
+  .fetch_optional(db.pool())
   .await
   {
-    Ok(perms) => perms,
-    Err(_) => return error_response(StatusCode::InternalServerError, "load_permissions_failed"),
+    Ok(Some(cache)) if cache.modified_at == validation.record.modified_at => {
+      Some(cache.permissions.0)
+    }
+    Ok(Some(_)) => None,
+    Ok(None) => None,
+    Err(_) => {
+      return error_response(
+        StatusCode::InternalServerError,
+        "load_permissions_cache_failed",
+      );
+    }
+  };
+
+  let permissions = if let Some(perms) = cached_permissions {
+    perms
+  } else {
+    let perms = match sqlx::query_scalar::<_, String>(
+      "SELECT name FROM (
+        SELECT DISTINCT p.id, p.name
+        FROM auth.person_service_role psr
+        JOIN auth.role_permission rp ON rp.role_id = psr.role_id
+        JOIN auth.permission p ON p.id = rp.permission_id
+        WHERE psr.person_id = $1 AND psr.service_id = $2
+      ) perms
+      ORDER BY id",
+    )
+    .bind(person_id)
+    .bind(service_id)
+    .fetch_all(db.pool())
+    .await
+    {
+      Ok(perms) => perms,
+      Err(_) => return error_response(StatusCode::InternalServerError, "load_permissions_failed"),
+    };
+
+    if let Err(_) = sqlx::query(
+      "INSERT INTO auth.permissions_cache (token, service_id, permissions, modified_at)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (token, service_id)
+        DO UPDATE SET permissions = EXCLUDED.permissions, modified_at = EXCLUDED.modified_at",
+    )
+    .bind(&validation.record.token)
+    .bind(service_id)
+    .bind(Json(&perms))
+    .bind(validation.record.modified_at)
+    .execute(db.pool())
+    .await
+    {
+      return error_response(
+        StatusCode::InternalServerError,
+        "store_permissions_cache_failed",
+      );
+    }
+    perms
   };
 
   let roles = match sqlx::query_scalar::<_, String>(
