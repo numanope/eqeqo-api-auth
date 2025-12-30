@@ -1,4 +1,4 @@
-# EQEQO Auth API
+# EQEQO API AUTH
 
 Centralized authentication and authorization service for the **Eqeqo** ecosystem.
 Issues short-lived tokens, renews them atomically near expiry, and enforces access control with a DB-backed token cache plus periodic cleanup.
