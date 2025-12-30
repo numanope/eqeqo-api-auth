@@ -39,6 +39,17 @@ Data reference: see `./db/DB.md` (seeded dataset: IDs, users, services, roles, p
 - Minimal logging per request records token, endpoint, timestamp, and IP.
 - Tokens are stored hashed in the cache; user passwords are stored as bcrypt hashes (demo users seeded with bcrypt).
 
+## 🔎 Auth flows (simple)
+**Frontend or unsafe clients**
+- Use `user token` + `service id` for context.
+- Call the backend with the user token; backend resolves access via Auth API using the service id.
+- Do not expose a service token in the browser or mobile apps.
+
+**Backend to backend**
+- Use `user token` + `service token`.
+- Backend calls Auth API (or `/check-permission`) with both tokens to confirm access.
+- Service token stays only on the server.
+
 ## 🚀 Quick request example
 Example: fetching user data for “Juan” (id `7`) from client `servcli1` using an arbitrary token:
 
