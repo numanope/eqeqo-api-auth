@@ -29,27 +29,29 @@ pub(super) fn error_response_with_detail(
   }
 }
 
-fn extract_token(req: &Request) -> Option<String> {
+fn extract_header(req: &Request, name: &str) -> Option<String> {
   req
     .headers
     .iter()
-    .find(|(key, _)| key.eq_ignore_ascii_case("token"))
+    .find(|(key, _)| key.eq_ignore_ascii_case(name))
     .map(|(_, value)| value.trim().to_string())
     .filter(|value| !value.is_empty())
 }
 
-fn extract_service_token(req: &Request) -> Option<String> {
-  req
-    .headers
-    .iter()
-    .find(|(key, _)| key.eq_ignore_ascii_case("service-token"))
-    .map(|(_, value)| value.trim().to_string())
-    .filter(|value| !value.is_empty())
+fn extract_token(req: &Request) -> Option<String> {
+  extract_header(req, "user-token")
 }
+
+pub(super) fn extract_service_token(req: &Request) -> Option<String> {
+  extract_header(req, "service-token")
+}
+
 
 pub(super) fn unauthorized_response(message: &str) -> Response {
   let detail = match message {
-    "missing_token_header" => "header token ausente o vacío; envía token: <valor> en cada petición",
+    "missing_token_header" => {
+      "header user-token ausente o vacío; envía user-token: <valor> en cada petición"
+    }
     "missing_service_token_header" => {
       "header service-token ausente o vacío; envía service-token: <valor> en cada petición"
     }
@@ -130,48 +132,6 @@ async fn require_token(
   }
 }
 
-pub(super) async fn require_service_token(
-  db: &DB,
-  req: &Request,
-) -> Result<(TokenValidation, String, i32), Response> {
-  let token = match extract_service_token(req) {
-    Some(value) => value,
-    None => return Err(unauthorized_response("missing_service_token_header")),
-  };
-  let manager = TokenManager::new(db.pool());
-  let validation = match manager.validate_service_token(&token).await {
-    Ok(validation) => validation,
-    Err(TokenError::NotFound) => return Err(unauthorized_response("invalid_service_token")),
-    Err(TokenError::Expired) => return Err(unauthorized_response("expired_token")),
-    Err(TokenError::Database(_)) => {
-      return Err(error_response(
-        StatusCode::InternalServerError,
-        "service_token_validation_failed",
-      ));
-    }
-  };
-  let service_id = validation
-    .record
-    .payload
-    .get("service_id")
-    .and_then(|value| value.as_i64())
-    .map(|value| value as i32)
-    .ok_or_else(|| unauthorized_response("invalid_service_token"))?;
-
-  match sqlx::query_scalar::<_, bool>("SELECT status FROM auth.services WHERE id = $1")
-    .bind(service_id)
-    .fetch_optional(db.pool())
-    .await
-  {
-    Ok(Some(true)) => Ok((validation, token, service_id)),
-    Ok(Some(false)) => Err(unauthorized_response("service_inactive")),
-    Ok(None) => Err(unauthorized_response("invalid_service_token")),
-    Err(_) => Err(error_response(
-      StatusCode::InternalServerError,
-      "service_lookup_failed",
-    )),
-  }
-}
 
 pub(super) async fn require_token_with_renew(
   req: &Request,

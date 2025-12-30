@@ -170,7 +170,7 @@ pub async fn issue_service_token(req: &Request) -> Response {
     content: json!({
       "service_id": service.id,
       "service_name": service.name,
-      "token": issued.token,
+      "service_token": issued.token,
       "expires_at": issued.expires_at,
     })
     .to_string()

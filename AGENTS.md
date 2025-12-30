@@ -1,9 +1,4 @@
-# AGENTS.md — Eqeqo Auth API
-
-## Rol
-Central identity and authorization API for the Eqeqo ecosystem.
-Manages users, services, roles, and permissions.
-Issues and validates access tokens for all other APIs.
+# AGENTS.md
 
 ## Coding & Commit Rules
 - Use **two-space indentation**, no tabs.

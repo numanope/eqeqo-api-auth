@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{
-  FlexibleId, error_response, get_db_connection, load_roles_and_permissions, log_access,
-  require_service_token, require_token_with_renew, unauthorized_response, with_auth,
-  with_auth_no_renew,
+  FlexibleId, error_response, extract_service_token, get_db_connection,
+  load_roles_and_permissions, log_access, require_token_with_renew, unauthorized_response,
+  with_auth, with_auth_no_renew,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -92,7 +92,7 @@ pub async fn login(req: &Request) -> Response {
     status: StatusCode::Ok.to_string(),
     content_type: "application/json".to_string(),
     content: json!({
-      "token": issued.token,
+      "user_token": issued.token,
       "expires_at": issued.expires_at,
       "payload": user_payload,
     })
@@ -134,48 +134,101 @@ pub async fn profile(req: &Request) -> Response {
   .await
 }
 
-pub async fn check_token(req: &Request) -> Response {
-  #[derive(Deserialize)]
-  struct CheckTokenRequest {
-    user_id: Option<FlexibleId>,
+pub async fn check_permission(req: &Request) -> Response {
+  #[derive(Deserialize, Default)]
+  struct CheckPermissionRequest {
+    service_id: Option<FlexibleId>,
   }
 
-  let body_checks: Option<CheckTokenRequest> = if req.body.trim().is_empty() {
-    None
+  let payload: CheckPermissionRequest = if req.body.trim().is_empty() {
+    CheckPermissionRequest::default()
   } else {
-    serde_json::from_slice(req.body.as_bytes()).ok()
+    match serde_json::from_slice(req.body.as_bytes()) {
+      Ok(payload) => payload,
+      Err(_) => return error_response(StatusCode::BadRequest, "invalid_request_body"),
+    }
   };
 
-  let (db, validation, _token) = match require_token_with_renew(req).await {
-    Ok(result) => result,
+  let (db, validation, _) = match require_token_with_renew(req).await {
+    Ok(values) => values,
     Err(response) => return response,
   };
 
-  let (_service_validation, _service_token, service_id) =
-    match require_service_token(&db, req).await {
-      Ok(result) => result,
-      Err(response) => return response,
-    };
-
-  let payload = validation.record.payload.clone();
-  let token_user_id = payload
-    .get("user_id")
-    .and_then(|value| value.as_i64())
-    .map(|v| v as i32);
-
-  if let Some(checks) = &body_checks {
-    if let (Some(expected), Some(actual)) = (
-      checks.user_id.as_ref().and_then(|id| id.parse_int()),
-      token_user_id,
-    ) {
-      if expected != actual {
-        return unauthorized_response("invalid_token");
-      }
-    }
+  let service_token = extract_service_token(req);
+  let service_id = payload
+    .service_id
+    .as_ref()
+    .and_then(|id| id.parse_int());
+  if payload.service_id.is_some() && service_id.is_none() {
+    return error_response(StatusCode::BadRequest, "invalid_service_id");
+  }
+  if service_token.is_some() == service_id.is_some() {
+    return error_response(StatusCode::BadRequest, "invalid_request_body");
   }
 
-  let user_id = match token_user_id {
-    Some(id) => id,
+  let service_id = if let Some(service_token) = service_token {
+    let manager = TokenManager::new(db.pool());
+    let service_validation = match manager.validate_service_token(&service_token).await {
+      Ok(validation) => validation,
+      Err(crate::auth::TokenError::NotFound) => {
+        return unauthorized_response("invalid_service_token");
+      }
+      Err(crate::auth::TokenError::Expired) => return unauthorized_response("expired_token"),
+      Err(crate::auth::TokenError::Database(_)) => {
+        return error_response(
+          StatusCode::InternalServerError,
+          "service_token_validation_failed",
+        );
+      }
+    };
+    let service_id = match service_validation
+      .record
+      .payload
+      .get("service_id")
+      .and_then(|value| value.as_i64())
+      .map(|value| value as i32)
+    {
+      Some(service_id) => service_id,
+      None => return unauthorized_response("invalid_service_token"),
+    };
+    match sqlx::query_scalar::<_, bool>("SELECT status FROM auth.services WHERE id = $1")
+      .bind(service_id)
+      .fetch_optional(db.pool())
+      .await
+    {
+      Ok(Some(true)) => service_id,
+      Ok(Some(false)) => return unauthorized_response("service_inactive"),
+      Ok(None) => return unauthorized_response("invalid_service_token"),
+      Err(_) => {
+        return error_response(StatusCode::InternalServerError, "service_lookup_failed");
+      }
+    }
+  } else {
+    let service_id = match service_id {
+      Some(id) => id,
+      None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
+    };
+    match sqlx::query_scalar::<_, bool>("SELECT status FROM auth.services WHERE id = $1")
+      .bind(service_id)
+      .fetch_optional(db.pool())
+      .await
+    {
+      Ok(Some(true)) => service_id,
+      Ok(Some(false)) => return unauthorized_response("service_inactive"),
+      Ok(None) => return error_response(StatusCode::BadRequest, "invalid_service_id"),
+      Err(_) => {
+        return error_response(StatusCode::InternalServerError, "service_lookup_failed");
+      }
+    }
+  };
+
+  let payload = validation.record.payload.clone();
+  let user_id = match payload
+    .get("user_id")
+    .and_then(|value| value.as_i64())
+    .map(|v| v as i32)
+  {
+    Some(user_id) => user_id,
     None => return unauthorized_response("invalid_token"),
   };
 

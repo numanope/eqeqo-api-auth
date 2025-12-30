@@ -38,8 +38,7 @@ fn build_cors_policy() -> httpageboy::CorsPolicy {
     }
   };
 
-  push_unique("token");
-  push_unique("service-token");
+  push_unique("user-token");
   if let Ok(extra) = std::env::var("CORS_HEADERS") {
     for header in extra.split(',').map(|h| h.trim()).filter(|h| !h.is_empty()) {
       push_unique(header);
@@ -87,7 +86,7 @@ pub async fn create_server(server_url: &str) -> Server {
   server.add_route("/auth/login", Rt::POST, handler!(login));
   server.add_route("/auth/logout", Rt::POST, handler!(logout));
   server.add_route("/auth/profile", Rt::GET, handler!(profile));
-  server.add_route("/check-token", Rt::POST, handler!(check_token));
+  server.add_route("/check-permission", Rt::POST, handler!(check_permission));
 
   // Users
   server.add_route("/users", Rt::GET, handler!(list_people));
