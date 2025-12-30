@@ -38,12 +38,26 @@ fn extract_token(req: &Request) -> Option<String> {
     .filter(|value| !value.is_empty())
 }
 
+fn extract_service_token(req: &Request) -> Option<String> {
+  req
+    .headers
+    .iter()
+    .find(|(key, _)| key.eq_ignore_ascii_case("service-token"))
+    .map(|(_, value)| value.trim().to_string())
+    .filter(|value| !value.is_empty())
+}
+
 pub(super) fn unauthorized_response(message: &str) -> Response {
   let detail = match message {
     "missing_token_header" => "header token ausente o vacío; envía token: <valor> en cada petición",
+    "missing_service_token_header" => {
+      "header service-token ausente o vacío; envía service-token: <valor> en cada petición"
+    }
     "invalid_token" => "token inválido o revocado; realiza login para obtener uno nuevo",
+    "invalid_service_token" => "token de servicio inválido o revocado; solicita uno nuevo",
     "expired_token" => "token expirado; solicita un token nuevo iniciando sesión",
     "invalid_credentials" => "usuario o contraseña incorrectos",
+    "service_inactive" => "servicio desactivado; contacta al administrador",
     _ => "solicitud no autorizada",
   };
   error_response_with_detail(StatusCode::Unauthorized, message, detail)
@@ -112,6 +126,49 @@ async fn require_token(
     Err(TokenError::Database(_)) => Err(error_response(
       StatusCode::InternalServerError,
       "token_validation_failed",
+    )),
+  }
+}
+
+pub(super) async fn require_service_token(
+  db: &DB,
+  req: &Request,
+) -> Result<(TokenValidation, String, i32), Response> {
+  let token = match extract_service_token(req) {
+    Some(value) => value,
+    None => return Err(unauthorized_response("missing_service_token_header")),
+  };
+  let manager = TokenManager::new(db.pool());
+  let validation = match manager.validate_service_token(&token).await {
+    Ok(validation) => validation,
+    Err(TokenError::NotFound) => return Err(unauthorized_response("invalid_service_token")),
+    Err(TokenError::Expired) => return Err(unauthorized_response("expired_token")),
+    Err(TokenError::Database(_)) => {
+      return Err(error_response(
+        StatusCode::InternalServerError,
+        "service_token_validation_failed",
+      ));
+    }
+  };
+  let service_id = validation
+    .record
+    .payload
+    .get("service_id")
+    .and_then(|value| value.as_i64())
+    .map(|value| value as i32)
+    .ok_or_else(|| unauthorized_response("invalid_service_token"))?;
+
+  match sqlx::query_scalar::<_, bool>("SELECT status FROM auth.services WHERE id = $1")
+    .bind(service_id)
+    .fetch_optional(db.pool())
+    .await
+  {
+    Ok(Some(true)) => Ok((validation, token, service_id)),
+    Ok(Some(false)) => Err(unauthorized_response("service_inactive")),
+    Ok(None) => Err(unauthorized_response("invalid_service_token")),
+    Err(_) => Err(error_response(
+      StatusCode::InternalServerError,
+      "service_lookup_failed",
     )),
   }
 }
@@ -278,6 +335,47 @@ pub(super) async fn resolve_person_id(db: &DB, identifier: &FlexibleId) -> Resul
     };
   }
   Err(error_response(StatusCode::BadRequest, "invalid_person_id"))
+}
+
+pub(super) async fn load_roles_and_permissions(
+  db: &DB,
+  person_id: i32,
+  service_id: i32,
+) -> Result<(Vec<String>, Vec<String>), Response> {
+  let permissions = match sqlx::query_scalar::<_, String>(
+    "SELECT name FROM (
+      SELECT DISTINCT p.id, p.name
+      FROM auth.person_service_role psr
+      JOIN auth.role_permission rp ON rp.role_id = psr.role_id
+      JOIN auth.permission p ON p.id = rp.permission_id
+      WHERE psr.person_id = $1 AND psr.service_id = $2
+    ) perms
+    ORDER BY id",
+  )
+  .bind(person_id)
+  .bind(service_id)
+  .fetch_all(db.pool())
+  .await
+  {
+    Ok(perms) => perms,
+    Err(_) => return Err(error_response(StatusCode::InternalServerError, "load_permissions_failed")),
+  };
+
+  let roles = match sqlx::query_scalar::<_, String>(
+    "SELECT r.name FROM auth.person_service_role psr
+      JOIN auth.role r ON r.id = psr.role_id
+      WHERE psr.person_id = $1 AND psr.service_id = $2",
+  )
+  .bind(person_id)
+  .bind(service_id)
+  .fetch_all(db.pool())
+  .await
+  {
+    Ok(list) => list,
+    Err(_) => return Err(error_response(StatusCode::InternalServerError, "load_roles_failed")),
+  };
+
+  Ok((roles, permissions))
 }
 
 mod permissions;

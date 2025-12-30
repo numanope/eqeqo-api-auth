@@ -1,3 +1,4 @@
+use crate::auth::TokenManager;
 use httpageboy::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -116,6 +117,64 @@ pub async fn delete_service(req: &Request) -> Response {
         .into_bytes(),
     },
     Err(_) => error_response(StatusCode::InternalServerError, "delete_service_failed"),
+  }
+}
+
+#[derive(sqlx::FromRow)]
+struct ServiceTokenData {
+  id: i32,
+  name: String,
+  status: bool,
+}
+
+pub async fn issue_service_token(req: &Request) -> Response {
+  let (db, _, _) = match require_token_with_renew(req).await {
+    Ok(tuple) => tuple,
+    Err(response) => return response,
+  };
+  let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
+    Some(id) => id,
+    None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
+  };
+
+  let service = match sqlx::query_as::<_, ServiceTokenData>(
+    "SELECT id, name, status FROM auth.services WHERE id = $1",
+  )
+  .bind(id)
+  .fetch_optional(db.pool())
+  .await
+  {
+    Ok(Some(service)) => service,
+    Ok(None) => return error_response(StatusCode::NotFound, "service_not_found"),
+    Err(_) => return error_response(StatusCode::InternalServerError, "load_service_failed"),
+  };
+
+  if !service.status {
+    return error_response(StatusCode::Forbidden, "service_inactive");
+  }
+
+  let manager = TokenManager::new(db.pool());
+  let issued = match manager.issue_service_token(service.id, &service.name).await {
+    Ok(issue) => issue,
+    Err(_) => {
+      return error_response(
+        StatusCode::InternalServerError,
+        "issue_service_token_failed",
+      );
+    }
+  };
+
+  Response {
+    status: StatusCode::Ok.to_string(),
+    content_type: "application/json".to_string(),
+    content: json!({
+      "service_id": service.id,
+      "service_name": service.name,
+      "token": issued.token,
+      "expires_at": issued.expires_at,
+    })
+    .to_string()
+    .into_bytes(),
   }
 }
 

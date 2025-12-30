@@ -1,3 +1,4 @@
+use crate::auth::TokenManager;
 use httpageboy::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -143,11 +144,20 @@ pub async fn assign_permission_to_role(req: &Request) -> Response {
     .execute(db.pool())
     .await
   {
-    Ok(_) => Response {
-      status: StatusCode::Ok.to_string(),
-      content_type: "application/json".to_string(),
-      content: json!({ "status": "success" }).to_string().into_bytes(),
-    },
+    Ok(_) => {
+      let manager = TokenManager::new(db.pool());
+      if let Err(_) = manager.clear_access_cache().await {
+        return error_response(
+          StatusCode::InternalServerError,
+          "invalidate_access_cache_failed",
+        );
+      }
+      Response {
+        status: StatusCode::Ok.to_string(),
+        content_type: "application/json".to_string(),
+        content: json!({ "status": "success" }).to_string().into_bytes(),
+      }
+    }
     Err(_) => error_response(StatusCode::InternalServerError, "assign_permission_failed"),
   }
 }
@@ -167,17 +177,26 @@ pub async fn remove_permission_from_role(req: &Request) -> Response {
     .execute(db.pool())
     .await
   {
-    Ok(_) => Response {
-      status: StatusCode::Ok.to_string(),
-      content_type: "application/json".to_string(),
-      content: json!({
-        "status": "permission_removed_from_role",
-        "role_id": payload.role_id,
-        "permission_id": payload.permission_id
-      })
-      .to_string()
-      .into_bytes(),
-    },
+    Ok(_) => {
+      let manager = TokenManager::new(db.pool());
+      if let Err(_) = manager.clear_access_cache().await {
+        return error_response(
+          StatusCode::InternalServerError,
+          "invalidate_access_cache_failed",
+        );
+      }
+      Response {
+        status: StatusCode::Ok.to_string(),
+        content_type: "application/json".to_string(),
+        content: json!({
+          "status": "permission_removed_from_role",
+          "role_id": payload.role_id,
+          "permission_id": payload.permission_id
+        })
+        .to_string()
+        .into_bytes(),
+      }
+    }
     Err(_) => error_response(StatusCode::InternalServerError, "remove_permission_failed"),
   }
 }

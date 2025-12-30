@@ -20,6 +20,15 @@ async fn boot_server() {
     .await;
 }
 
+fn extract_token_value(response: &str, key: &str) -> String {
+  response
+    .split(&format!("\"{}\":\"", key))
+    .nth(1)
+    .and_then(|segment| segment.split('"').next())
+    .expect("token value")
+    .to_string()
+}
+
 #[tokio::test]
 async fn test_home_success() {
   boot_server().await;
@@ -128,14 +137,19 @@ async fn test_check_token_success() {
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
   let login_response = run_test(request, expected, Some(SERVER_URL)).await;
-  let token = login_response
-    .split("\"token\":\"")
-    .nth(1)
-    .and_then(|segment| segment.split('"').next())
-    .expect("token value")
-    .to_string();
+  let token = extract_token_value(&login_response, "token");
 
-  let check_request = format!("POST /check-token HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
+  let service_request =
+    format!("POST /services/1/token HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
+  let service_expected = b"\"token\"";
+  let service_response = run_test(service_request.as_bytes(), service_expected, Some(SERVER_URL))
+    .await;
+  let service_token = extract_token_value(&service_response, "token");
+
+  let check_request = format!(
+    "POST /check-token HTTP/1.1\r\ntoken: {}\r\nservice-token: {}\r\n\r\n",
+    token, service_token
+  );
   let request = check_request.as_bytes();
   let expected = b"\"valid\":true";
   run_test(request, expected, Some(SERVER_URL)).await;
@@ -163,17 +177,19 @@ async fn test_check_token_user_mismatch() {
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
   let expected = b"\"token\"";
   let login_response = run_test(request, expected, Some(SERVER_URL)).await;
-  let token = login_response
-    .split("\"token\":\"")
-    .nth(1)
-    .and_then(|segment| segment.split('"').next())
-    .expect("token value")
-    .to_string();
+  let token = extract_token_value(&login_response, "token");
+
+  let service_request =
+    format!("POST /services/1/token HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
+  let service_expected = b"\"token\"";
+  let service_response = run_test(service_request.as_bytes(), service_expected, Some(SERVER_URL))
+    .await;
+  let service_token = extract_token_value(&service_response, "token");
 
   let check_body = "{\"user_id\":99999}";
   let check_request = format!(
-    "POST /check-token HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{}",
-    token, check_body
+    "POST /check-token HTTP/1.1\r\ntoken: {}\r\nservice-token: {}\r\nContent-Type: application/json\r\n\r\n{}",
+    token, service_token, check_body
   );
   let request = check_request.as_bytes();
   let expected = b"invalid_token";

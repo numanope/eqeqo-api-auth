@@ -1,13 +1,14 @@
 use httpageboy::{Request, Response, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
-use sqlx::types::Json;
+use crate::auth::TokenManager;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::roles::Role;
 use super::users::User;
 use super::{
-  FlexibleId, error_response, require_token_with_renew, resolve_permission_id, resolve_person_id,
-  resolve_service_id,
+  FlexibleId, error_response, load_roles_and_permissions, require_token_with_renew,
+  resolve_permission_id, resolve_person_id, resolve_service_id,
 };
 
 #[derive(Deserialize)]
@@ -35,11 +36,20 @@ pub async fn assign_role_to_service(req: &Request) -> Response {
     .execute(db.pool())
     .await
   {
-    Ok(_) => Response {
-      status: StatusCode::Ok.to_string(),
-      content_type: "application/json".to_string(),
-      content: json!({ "status": "success" }).to_string().into_bytes(),
-    },
+    Ok(_) => {
+      let manager = TokenManager::new(db.pool());
+      if let Err(_) = manager.delete_access_cache_for_service(service_id).await {
+        return error_response(
+          StatusCode::InternalServerError,
+          "invalidate_access_cache_failed",
+        );
+      }
+      Response {
+        status: StatusCode::Ok.to_string(),
+        content_type: "application/json".to_string(),
+        content: json!({ "status": "success" }).to_string().into_bytes(),
+      }
+    }
     Err(_) => error_response(
       StatusCode::InternalServerError,
       "assign_role_service_failed",
@@ -66,13 +76,22 @@ pub async fn remove_role_from_service(req: &Request) -> Response {
     .execute(db.pool())
     .await
   {
-    Ok(_) => Response {
-      status: StatusCode::Ok.to_string(),
-      content_type: "application/json".to_string(),
-      content: json!({ "status": "role_removed_from_service" })
-        .to_string()
-        .into_bytes(),
-    },
+    Ok(_) => {
+      let manager = TokenManager::new(db.pool());
+      if let Err(_) = manager.delete_access_cache_for_service(service_id).await {
+        return error_response(
+          StatusCode::InternalServerError,
+          "invalidate_access_cache_failed",
+        );
+      }
+      Response {
+        status: StatusCode::Ok.to_string(),
+        content_type: "application/json".to_string(),
+        content: json!({ "status": "role_removed_from_service" })
+          .to_string()
+          .into_bytes(),
+      }
+    }
     Err(_) => error_response(
       StatusCode::InternalServerError,
       "remove_role_service_failed",
@@ -138,11 +157,20 @@ pub async fn assign_role_to_person_in_service(req: &Request) -> Response {
     .execute(db.pool())
     .await
   {
-    Ok(_) => Response {
-      status: StatusCode::Ok.to_string(),
-      content_type: "application/json".to_string(),
-      content: json!({ "status": "success" }).to_string().into_bytes(),
-    },
+    Ok(_) => {
+      let manager = TokenManager::new(db.pool());
+      if let Err(_) = manager.delete_access_cache(person_id, service_id).await {
+        return error_response(
+          StatusCode::InternalServerError,
+          "invalidate_access_cache_failed",
+        );
+      }
+      Response {
+        status: StatusCode::Ok.to_string(),
+        content_type: "application/json".to_string(),
+        content: json!({ "status": "success" }).to_string().into_bytes(),
+      }
+    }
     Err(_) => error_response(StatusCode::InternalServerError, "assign_role_person_failed"),
   }
 }
@@ -171,13 +199,22 @@ pub async fn remove_role_from_person_in_service(req: &Request) -> Response {
     .execute(db.pool())
     .await
   {
-    Ok(_) => Response {
-      status: StatusCode::Ok.to_string(),
-      content_type: "application/json".to_string(),
-      content: json!({ "status": "role_removed_from_person" })
-        .to_string()
-        .into_bytes(),
-    },
+    Ok(_) => {
+      let manager = TokenManager::new(db.pool());
+      if let Err(_) = manager.delete_access_cache(person_id, service_id).await {
+        return error_response(
+          StatusCode::InternalServerError,
+          "invalidate_access_cache_failed",
+        );
+      }
+      Response {
+        status: StatusCode::Ok.to_string(),
+        content_type: "application/json".to_string(),
+        content: json!({ "status": "role_removed_from_person" })
+          .to_string()
+          .into_bytes(),
+      }
+    }
     Err(_) => error_response(StatusCode::InternalServerError, "remove_role_person_failed"),
   }
 }
@@ -384,6 +421,14 @@ pub async fn grant_permission_to_person_in_service(req: &Request) -> Response {
     return error_response(StatusCode::InternalServerError, "assign_role_person_failed");
   }
 
+  let manager = TokenManager::new(db.pool());
+  if let Err(_) = manager.delete_access_cache(person_id, service_id).await {
+    return error_response(
+      StatusCode::InternalServerError,
+      "invalidate_access_cache_failed",
+    );
+  }
+
   Response {
     status: StatusCode::Ok.to_string(),
     content_type: "application/json".to_string(),
@@ -404,12 +449,6 @@ struct PersonData {
   id: i32,
   username: String,
   name: String,
-}
-
-#[derive(sqlx::FromRow)]
-struct PermissionsCacheRow {
-  permissions: Json<Vec<String>>,
-  modified_at: i64,
 }
 
 pub async fn get_person_service_info(req: &Request) -> Response {
@@ -461,84 +500,54 @@ pub async fn get_person_service_info(req: &Request) -> Response {
     Err(_) => return error_response(StatusCode::InternalServerError, "load_person_failed"),
   };
 
-  let cached_permissions = match sqlx::query_as::<_, PermissionsCacheRow>(
-    "SELECT permissions, modified_at FROM auth.permissions_cache WHERE token = $1 AND service_id = $2",
-  )
-  .bind(&validation.record.token)
-  .bind(service_id)
-  .fetch_optional(db.pool())
-  .await
-  {
-    Ok(Some(cache)) if cache.modified_at == validation.record.modified_at => {
-      Some(cache.permissions.0)
-    }
-    Ok(Some(_)) => None,
-    Ok(None) => None,
+  let now = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_secs() as i64;
+
+  let manager = TokenManager::new(db.pool());
+  let cached_access = match manager.load_access_cache(person_id, service_id).await {
+    Ok(Some(cache)) if cache.expires_at > now => Some(cache.access_json),
+    Ok(_) => None,
     Err(_) => {
       return error_response(
         StatusCode::InternalServerError,
-        "load_permissions_cache_failed",
+        "load_access_cache_failed",
       );
     }
   };
 
-  let permissions = if let Some(perms) = cached_permissions {
-    perms
+  let (roles, permissions) = if let Some(access) = cached_access {
+    let roles = access.get("roles").cloned().unwrap_or_else(|| json!([]));
+    let permissions = access
+      .get("permissions")
+      .cloned()
+      .unwrap_or_else(|| json!([]));
+    (roles, permissions)
   } else {
-    let perms = match sqlx::query_scalar::<_, String>(
-      "SELECT name FROM (
-        SELECT DISTINCT p.id, p.name
-        FROM auth.person_service_role psr
-        JOIN auth.role_permission rp ON rp.role_id = psr.role_id
-        JOIN auth.permission p ON p.id = rp.permission_id
-        WHERE psr.person_id = $1 AND psr.service_id = $2
-      ) perms
-      ORDER BY id",
-    )
-    .bind(person_id)
-    .bind(service_id)
-    .fetch_all(db.pool())
-    .await
-    {
-      Ok(perms) => perms,
-      Err(_) => return error_response(StatusCode::InternalServerError, "load_permissions_failed"),
+    let (roles, permissions) = match load_roles_and_permissions(&db, person_id, service_id).await {
+      Ok(result) => result,
+      Err(response) => return response,
     };
-
-    if let Err(_) = sqlx::query(
-      "INSERT INTO auth.permissions_cache (token, service_id, permissions, modified_at)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (token, service_id)
-        DO UPDATE SET permissions = EXCLUDED.permissions, modified_at = EXCLUDED.modified_at",
-    )
-    .bind(&validation.record.token)
-    .bind(service_id)
-    .bind(Json(&perms))
-    .bind(validation.record.modified_at)
-    .execute(db.pool())
-    .await
+    let expires_at = now + manager.ttl();
+    let access = json!({
+      "user_id": person_id,
+      "service_id": service_id,
+      "roles": roles,
+      "permissions": permissions,
+      "scopes": [],
+      "expires_at": expires_at,
+    });
+    if let Err(_) = manager
+      .store_access_cache(person_id, service_id, &access, now, expires_at)
+      .await
     {
       return error_response(
         StatusCode::InternalServerError,
-        "store_permissions_cache_failed",
+        "store_access_cache_failed",
       );
     }
-    perms
-  };
-
-  let roles = match sqlx::query_scalar::<_, String>(
-    "SELECT r.name FROM auth.person_service_role psr
-      JOIN auth.role r ON r.id = psr.role_id
-      WHERE psr.person_id = $1 AND psr.service_id = $2",
-  )
-  .bind(person_id)
-  .bind(service_id)
-  .fetch_all(db.pool())
-  .await
-  {
-    Ok(list) => list,
-    Err(_) => {
-      return error_response(StatusCode::InternalServerError, "load_roles_failed");
-    }
+    (json!(roles), json!(permissions))
   };
 
   Response {

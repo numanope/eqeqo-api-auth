@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{
-  FlexibleId, error_response, get_db_connection, log_access, require_token_with_renew,
-  unauthorized_response, with_auth, with_auth_no_renew,
+  FlexibleId, error_response, get_db_connection, load_roles_and_permissions, log_access,
+  require_service_token, require_token_with_renew, unauthorized_response, with_auth,
+  with_auth_no_renew,
 };
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // Basic endpoints
 pub async fn home(_req: &Request) -> Response {
@@ -144,38 +146,90 @@ pub async fn check_token(req: &Request) -> Response {
     serde_json::from_slice(req.body.as_bytes()).ok()
   };
 
-  with_auth(req, true, move |_req, _db, validation, _token| async move {
-    let payload = validation.record.payload.clone();
-    let token_user_id = payload
-      .get("user_id")
-      .and_then(|value| value.as_i64())
-      .map(|v| v as i32);
+  let (db, validation, _token) = match require_token_with_renew(req).await {
+    Ok(result) => result,
+    Err(response) => return response,
+  };
 
-    if let Some(checks) = &body_checks {
-      if let (Some(expected), Some(actual)) = (
-        checks.user_id.as_ref().and_then(|id| id.parse_int()),
-        token_user_id,
-      ) {
-        if expected != actual {
-          return unauthorized_response("invalid_token");
-        }
+  let (_service_validation, _service_token, service_id) =
+    match require_service_token(&db, req).await {
+      Ok(result) => result,
+      Err(response) => return response,
+    };
+
+  let payload = validation.record.payload.clone();
+  let token_user_id = payload
+    .get("user_id")
+    .and_then(|value| value.as_i64())
+    .map(|v| v as i32);
+
+  if let Some(checks) = &body_checks {
+    if let (Some(expected), Some(actual)) = (
+      checks.user_id.as_ref().and_then(|id| id.parse_int()),
+      token_user_id,
+    ) {
+      if expected != actual {
+        return unauthorized_response("invalid_token");
       }
     }
+  }
 
-    Response {
-      status: StatusCode::Ok.to_string(),
-      content_type: "application/json".to_string(),
-      content: json!({
-        "valid": true,
-        "payload": payload,
-        "renewed": validation.renewed,
-        "expires_at": validation.expires_at,
-      })
-      .to_string()
-      .into_bytes(),
+  let user_id = match token_user_id {
+    Some(id) => id,
+    None => return unauthorized_response("invalid_token"),
+  };
+
+  let now = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_secs() as i64;
+
+  let manager = TokenManager::new(db.pool());
+  let cached_access = match manager.load_access_cache(user_id, service_id).await {
+    Ok(Some(cache)) if cache.expires_at > now => Some(cache.access_json),
+    Ok(_) => None,
+    Err(_) => {
+      return error_response(StatusCode::InternalServerError, "load_access_cache_failed");
     }
-  })
-  .await
+  };
+
+  let access_json = if let Some(access) = cached_access {
+    access
+  } else {
+    let (roles, permissions) = match load_roles_and_permissions(&db, user_id, service_id).await {
+      Ok(result) => result,
+      Err(response) => return response,
+    };
+    let expires_at = now + manager.ttl();
+    let access = json!({
+      "user_id": user_id,
+      "service_id": service_id,
+      "roles": roles,
+      "permissions": permissions,
+      "scopes": [],
+      "expires_at": expires_at,
+    });
+    if let Err(_) = manager
+      .store_access_cache(user_id, service_id, &access, now, expires_at)
+      .await
+    {
+      return error_response(StatusCode::InternalServerError, "store_access_cache_failed");
+    }
+    access
+  };
+
+  Response {
+    status: StatusCode::Ok.to_string(),
+    content_type: "application/json".to_string(),
+    content: json!({
+      "valid": true,
+      "access": access_json,
+      "renewed": validation.renewed,
+      "expires_at": validation.expires_at,
+    })
+    .to_string()
+    .into_bytes(),
+  }
 }
 
 // User Handlers
