@@ -86,7 +86,7 @@ pub async fn login(req: &Request) -> Response {
     }
   };
 
-  log_access(&issued.token, req);
+  log_access(req);
 
   Response {
     status: StatusCode::Ok.to_string(),

@@ -46,7 +46,6 @@ pub(super) fn extract_service_token(req: &Request) -> Option<String> {
   extract_header(req, "service-token")
 }
 
-
 pub(super) fn unauthorized_response(message: &str) -> Response {
   let detail = match message {
     "missing_token_header" => {
@@ -72,32 +71,10 @@ fn current_epoch() -> i64 {
     .as_secs() as i64
 }
 
-fn extract_ip(req: &Request) -> String {
-  for header in ["x-forwarded-for", "x-real-ip", "remote-addr"] {
-    if let Some((_, value)) = req
-      .headers
-      .iter()
-      .find(|(key, _)| key.eq_ignore_ascii_case(header))
-    {
-      if let Some(first) = value.split(',').next() {
-        let trimmed = first.trim();
-        if !trimmed.is_empty() {
-          return trimmed.to_string();
-        }
-      }
-    }
-  }
-  "unknown".to_string()
-}
-
-pub(super) fn log_access(token: &str, req: &Request) {
+pub(super) fn log_access(req: &Request) {
   let endpoint = req.path.as_str();
-  let ip = extract_ip(req);
   let timestamp = current_epoch();
-  println!(
-    "[access] token={} endpoint={} ts={} ip={}",
-    token, endpoint, timestamp, ip
-  );
+  println!("- endpoint={} ts={}", endpoint, timestamp);
 }
 
 async fn require_token(
@@ -120,7 +97,7 @@ async fn require_token(
   let manager = TokenManager::new(db.pool());
   match manager.validate_token(&token, renew).await {
     Ok(validation) => {
-      log_access(&token, req);
+      log_access(req);
       Ok((db, validation, token))
     }
     Err(TokenError::NotFound) => Err(unauthorized_response("invalid_token")),
@@ -131,7 +108,6 @@ async fn require_token(
     )),
   }
 }
-
 
 pub(super) async fn require_token_with_renew(
   req: &Request,
@@ -318,7 +294,12 @@ pub(super) async fn load_roles_and_permissions(
   .await
   {
     Ok(perms) => perms,
-    Err(_) => return Err(error_response(StatusCode::InternalServerError, "load_permissions_failed")),
+    Err(_) => {
+      return Err(error_response(
+        StatusCode::InternalServerError,
+        "load_permissions_failed",
+      ));
+    }
   };
 
   let roles = match sqlx::query_scalar::<_, String>(
@@ -332,7 +313,12 @@ pub(super) async fn load_roles_and_permissions(
   .await
   {
     Ok(list) => list,
-    Err(_) => return Err(error_response(StatusCode::InternalServerError, "load_roles_failed")),
+    Err(_) => {
+      return Err(error_response(
+        StatusCode::InternalServerError,
+        "load_roles_failed",
+      ));
+    }
   };
 
   Ok((roles, permissions))
