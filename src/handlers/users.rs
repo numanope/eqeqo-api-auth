@@ -6,8 +6,8 @@ use serde_json::json;
 
 use super::{
   FlexibleId, error_response, extract_service_token, get_db_connection,
-  load_roles_and_permissions, log_access, require_token_with_renew, unauthorized_response,
-  with_auth, with_auth_no_renew,
+  load_roles_and_permissions, log_access, require_token_with_renew,
+  require_token_with_renew_no_log, unauthorized_response, with_auth, with_auth_no_renew,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -86,7 +86,7 @@ pub async fn login(req: &Request) -> Response {
     }
   };
 
-  log_access(req);
+  log_access(req, false);
 
   Response {
     status: StatusCode::Ok.to_string(),
@@ -149,7 +149,7 @@ pub async fn check_permission(req: &Request) -> Response {
     }
   };
 
-  let (db, validation, _) = match require_token_with_renew(req).await {
+  let (db, validation, _) = match require_token_with_renew_no_log(req).await {
     Ok(values) => values,
     Err(response) => return response,
   };
@@ -245,6 +245,7 @@ pub async fn check_permission(req: &Request) -> Response {
       return error_response(StatusCode::InternalServerError, "load_access_cache_failed");
     }
   };
+  let used_cache = cached_access.is_some();
 
   let access_json = if let Some(access) = cached_access {
     access
@@ -270,6 +271,8 @@ pub async fn check_permission(req: &Request) -> Response {
     }
     access
   };
+
+  log_access(req, used_cache);
 
   Response {
     status: StatusCode::Ok.to_string(),

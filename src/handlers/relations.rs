@@ -7,8 +7,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::roles::Role;
 use super::users::User;
 use super::{
-  FlexibleId, error_response, load_roles_and_permissions, require_token_with_renew,
-  resolve_permission_id, resolve_person_id, resolve_service_id,
+  FlexibleId, error_response, load_roles_and_permissions, log_access,
+  require_token_with_renew, require_token_with_renew_no_log, resolve_permission_id,
+  resolve_person_id, resolve_service_id,
 };
 
 #[derive(Deserialize)]
@@ -452,7 +453,7 @@ struct PersonData {
 }
 
 pub async fn get_person_service_info(req: &Request) -> Response {
-  let (db, validation, _) = match require_token_with_renew(req).await {
+  let (db, validation, _) = match require_token_with_renew_no_log(req).await {
     Ok(result) => result,
     Err(response) => return response,
   };
@@ -516,6 +517,7 @@ pub async fn get_person_service_info(req: &Request) -> Response {
       );
     }
   };
+  let used_cache = cached_access.is_some();
 
   let (roles, permissions) = if let Some(access) = cached_access {
     let roles = access.get("roles").cloned().unwrap_or_else(|| json!([]));
@@ -549,6 +551,8 @@ pub async fn get_person_service_info(req: &Request) -> Response {
     }
     (json!(roles), json!(permissions))
   };
+
+  log_access(req, used_cache);
 
   Response {
     status: StatusCode::Ok.to_string(),

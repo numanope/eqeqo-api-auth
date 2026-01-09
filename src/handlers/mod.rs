@@ -71,15 +71,17 @@ fn current_epoch() -> i64 {
     .as_secs() as i64
 }
 
-pub(super) fn log_access(req: &Request) {
+pub(super) fn log_access(req: &Request, cached: bool) {
   let endpoint = req.path.as_str();
   let timestamp = current_epoch();
-  println!("- endpoint={} ts={}", endpoint, timestamp);
+  let cached_suffix = if cached { " [cached]" } else { "" };
+  println!("- ts={}, endpoint={}{}", timestamp, endpoint, cached_suffix);
 }
 
 async fn require_token(
   req: &Request,
   renew: bool,
+  log_request: bool,
 ) -> Result<(DB, TokenValidation, String), Response> {
   let token = match extract_token(req) {
     Some(value) => value,
@@ -97,7 +99,9 @@ async fn require_token(
   let manager = TokenManager::new(db.pool());
   match manager.validate_token(&token, renew).await {
     Ok(validation) => {
-      log_access(req);
+      if log_request {
+        log_access(req, false);
+      }
       Ok((db, validation, token))
     }
     Err(TokenError::NotFound) => Err(unauthorized_response("invalid_token")),
@@ -112,7 +116,13 @@ async fn require_token(
 pub(super) async fn require_token_with_renew(
   req: &Request,
 ) -> Result<(DB, TokenValidation, String), Response> {
-  require_token(req, true).await
+  require_token(req, true, true).await
+}
+
+pub(super) async fn require_token_with_renew_no_log(
+  req: &Request,
+) -> Result<(DB, TokenValidation, String), Response> {
+  require_token(req, true, false).await
 }
 
 pub(super) async fn get_db_connection() -> Result<DB, Response> {
@@ -130,7 +140,7 @@ where
   F: FnOnce(&Request, DB, TokenValidation, String) -> Fut,
   Fut: Future<Output = Response>,
 {
-  match require_token(req, renew).await {
+  match require_token(req, renew, true).await {
     Ok((db, validation, token)) => action(req, db, validation, token).await,
     Err(response) => response,
   }
