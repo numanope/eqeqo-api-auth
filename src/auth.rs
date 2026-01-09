@@ -11,9 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct TokenRecord {
   pub token: String,
   pub payload: Value,
-  pub user_id: Option<i32>,
-  pub service_id: Option<i32>,
-  pub modified_at: i64,
+  pub expires_at: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -120,48 +118,29 @@ impl<'a> TokenManager<'a> {
     format!("{:x}", digest)
   }
 
-  fn hash_token_value(token: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(token.as_bytes());
-    format!("{:x}", hasher.finalize())
-  }
-
-  fn payload_int(payload: &Value, key: &str) -> Option<i32> {
-    payload
-      .get(key)
-      .and_then(|value| value.as_i64())
-      .and_then(|value| i32::try_from(value).ok())
-  }
-
   async fn insert_token(
     &self,
     token: &str,
     payload: &Value,
-    modified_at: i64,
+    expires_at: i64,
   ) -> Result<(), sqlx::Error> {
-    let hashed = Self::hash_token_value(token);
-    let user_id = Self::payload_int(payload, "user_id");
-    let service_id = Self::payload_int(payload, "service_id");
     sqlx::query(
-      "INSERT INTO auth.tokens_cache (token, payload, modified_at, user_id, service_id)
-        VALUES ($1, $2, $3, $4, $5)",
+      "INSERT INTO auth.tokens_cache (token, payload, expires_at)
+        VALUES ($1, $2, $3)",
     )
-    .bind(hashed)
+    .bind(token)
     .bind(payload)
-    .bind(modified_at)
-    .bind(user_id)
-    .bind(service_id)
+    .bind(expires_at)
     .execute(self.pool)
     .await?;
     Ok(())
   }
 
   async fn fetch_token(&self, token: &str) -> Result<Option<TokenRecord>, sqlx::Error> {
-    let hashed = Self::hash_token_value(token);
     sqlx::query_as::<_, TokenRecord>(
-      "SELECT token, payload, user_id, service_id, modified_at FROM auth.tokens_cache WHERE token = $1",
+      "SELECT token, payload, expires_at FROM auth.tokens_cache WHERE token = $1",
     )
-    .bind(hashed)
+    .bind(token)
     .fetch_optional(self.pool)
     .await
   }
@@ -169,28 +148,20 @@ impl<'a> TokenManager<'a> {
   async fn touch_token(
     &self,
     token: &str,
-    previous_modified_at: i64,
-    new_modified_at: i64,
+    previous_expires_at: i64,
+    new_expires_at: i64,
   ) -> Result<Option<TokenRecord>, sqlx::Error> {
-    let hashed = Self::hash_token_value(token);
     let updated = sqlx::query_as::<_, TokenRecord>(
       "UPDATE auth.tokens_cache
-        SET modified_at = $1
-        WHERE token = $2 AND modified_at = $3
-        RETURNING token, payload, user_id, service_id, modified_at",
+        SET expires_at = $1
+        WHERE token = $2 AND expires_at = $3
+        RETURNING token, payload, expires_at",
     )
-    .bind(new_modified_at)
-    .bind(&hashed)
-    .bind(previous_modified_at)
+    .bind(new_expires_at)
+    .bind(token)
+    .bind(previous_expires_at)
     .fetch_optional(self.pool)
     .await?;
-    if updated.is_some() {
-      sqlx::query("UPDATE auth.permissions_cache SET modified_at = $1 WHERE token = $2")
-        .bind(new_modified_at)
-        .bind(&hashed)
-        .execute(self.pool)
-        .await?;
-    }
     Ok(updated)
   }
 
@@ -206,10 +177,11 @@ impl<'a> TokenManager<'a> {
     let now = Self::now_epoch();
     let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "local_secret".to_string());
     let token = Self::generate_token_value(&secret, now);
-    self.insert_token(&token, &payload, now).await?;
+    let expires_at = self.compute_expires_at(now);
+    self.insert_token(&token, &payload, expires_at).await?;
     Ok(TokenIssue {
       token,
-      expires_at: self.compute_expires_at(now),
+      expires_at,
     })
   }
 
@@ -226,17 +198,17 @@ impl<'a> TokenManager<'a> {
       "service_name": service_name,
       "token_type": "service",
     });
-    self.insert_token(&token, &payload, now).await?;
+    let expires_at = self.compute_service_expires_at(now);
+    self.insert_token(&token, &payload, expires_at).await?;
     Ok(TokenIssue {
       token,
-      expires_at: self.compute_service_expires_at(now),
+      expires_at,
     })
   }
 
   pub async fn delete_token(&self, token: &str) -> Result<bool, sqlx::Error> {
-    let hashed = Self::hash_token_value(token);
     let rows = sqlx::query("DELETE FROM auth.tokens_cache WHERE token = $1")
-      .bind(hashed)
+      .bind(token)
       .execute(self.pool)
       .await?
       .rows_affected();
@@ -258,10 +230,12 @@ impl<'a> TokenManager<'a> {
     service_id: i32,
   ) -> Result<u64, sqlx::Error> {
     let rows = sqlx::query(
-      "DELETE FROM auth.tokens_cache
-        WHERE user_id = $1 AND service_id = $2 AND access_json IS NOT NULL",
+      "DELETE FROM auth.permissions_cache
+        WHERE token IN (
+          SELECT token FROM auth.tokens_cache WHERE payload ->> 'user_id' = $1
+        ) AND service_id = $2",
     )
-    .bind(user_id)
+    .bind(user_id.to_string())
     .bind(service_id)
     .execute(self.pool)
     .await?
@@ -271,12 +245,15 @@ impl<'a> TokenManager<'a> {
 
   pub async fn delete_access_cache_for_user(&self, user_id: i32) -> Result<u64, sqlx::Error> {
     let rows = sqlx::query(
-      "DELETE FROM auth.tokens_cache WHERE user_id = $1 AND access_json IS NOT NULL",
+      "DELETE FROM auth.permissions_cache
+        WHERE token IN (
+          SELECT token FROM auth.tokens_cache WHERE payload ->> 'user_id' = $1
+        )",
     )
-    .bind(user_id)
-    .execute(self.pool)
-    .await?
-    .rows_affected();
+      .bind(user_id.to_string())
+      .execute(self.pool)
+      .await?
+      .rows_affected();
     Ok(rows)
   }
 
@@ -284,9 +261,7 @@ impl<'a> TokenManager<'a> {
     &self,
     service_id: i32,
   ) -> Result<u64, sqlx::Error> {
-    let rows = sqlx::query(
-      "DELETE FROM auth.tokens_cache WHERE service_id = $1 AND access_json IS NOT NULL",
-    )
+    let rows = sqlx::query("DELETE FROM auth.permissions_cache WHERE service_id = $1")
     .bind(service_id)
     .execute(self.pool)
     .await?
@@ -295,7 +270,7 @@ impl<'a> TokenManager<'a> {
   }
 
   pub async fn clear_access_cache(&self) -> Result<u64, sqlx::Error> {
-    let rows = sqlx::query("DELETE FROM auth.tokens_cache WHERE access_json IS NOT NULL")
+    let rows = sqlx::query("DELETE FROM auth.permissions_cache")
       .execute(self.pool)
       .await?
       .rows_affected();
@@ -304,15 +279,15 @@ impl<'a> TokenManager<'a> {
 
   pub async fn load_access_cache(
     &self,
-    user_id: i32,
+    token: &str,
     service_id: i32,
   ) -> Result<Option<AccessCacheRecord>, sqlx::Error> {
     sqlx::query_as::<_, AccessCacheRecord>(
-      "SELECT access_json, expires_at, modified_at
-        FROM auth.tokens_cache
-        WHERE user_id = $1 AND service_id = $2 AND access_json IS NOT NULL",
+      "SELECT permissions AS access_json, expires_at
+        FROM auth.permissions_cache
+        WHERE token = $1 AND service_id = $2",
     )
-    .bind(user_id)
+    .bind(token)
     .bind(service_id)
     .fetch_optional(self.pool)
     .await
@@ -320,33 +295,23 @@ impl<'a> TokenManager<'a> {
 
   pub async fn store_access_cache(
     &self,
-    user_id: i32,
+    token: &str,
     service_id: i32,
     access_json: &Value,
-    modified_at: i64,
     expires_at: i64,
   ) -> Result<(), sqlx::Error> {
-    let cache_key = format!("access:{}:{}", user_id, service_id);
-    let hashed = Self::hash_token_value(&cache_key);
     sqlx::query(
-      "INSERT INTO auth.tokens_cache
-        (token, payload, user_id, service_id, access_json, expires_at, modified_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (token)
-        DO UPDATE SET payload = EXCLUDED.payload,
-          user_id = EXCLUDED.user_id,
-          service_id = EXCLUDED.service_id,
-          access_json = EXCLUDED.access_json,
-          expires_at = EXCLUDED.expires_at,
-          modified_at = EXCLUDED.modified_at",
+      "INSERT INTO auth.permissions_cache
+        (token, service_id, permissions, expires_at)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (token, service_id)
+        DO UPDATE SET permissions = EXCLUDED.permissions,
+          expires_at = EXCLUDED.expires_at",
     )
-    .bind(hashed)
-    .bind(access_json)
-    .bind(user_id)
+    .bind(token)
     .bind(service_id)
     .bind(access_json)
     .bind(expires_at)
-    .bind(modified_at)
     .execute(self.pool)
     .await?;
     Ok(())
@@ -354,32 +319,33 @@ impl<'a> TokenManager<'a> {
 
   pub async fn cleanup_expired(&self) -> Result<u64, sqlx::Error> {
     let now = Self::now_epoch();
-    let user_cutoff = now - self.config.ttl_seconds.max(1);
-    let service_cutoff = now - self.config.service_ttl_seconds.max(1);
     let rows = sqlx::query(
       "DELETE FROM auth.tokens_cache
-        WHERE (access_json IS NOT NULL AND expires_at IS NOT NULL AND expires_at < $1)
-          OR (access_json IS NULL AND payload ->> 'token_type' = 'service' AND modified_at < $2)
-          OR (access_json IS NULL AND (payload ->> 'token_type' IS NULL OR payload ->> 'token_type' <> 'service') AND modified_at < $3)",
+        WHERE expires_at < $1",
     )
       .bind(now)
-      .bind(service_cutoff)
-      .bind(user_cutoff)
       .execute(self.pool)
       .await?
       .rows_affected();
-    Ok(rows)
+    let permissions_rows = sqlx::query(
+      "DELETE FROM auth.permissions_cache
+        WHERE expires_at < $1",
+    )
+    .bind(now)
+    .execute(self.pool)
+    .await?
+    .rows_affected();
+    Ok(rows + permissions_rows)
   }
 
-  fn has_expired(&self, modified_at: i64, now: i64, ttl_seconds: i64) -> bool {
-    now - modified_at > ttl_seconds
+  fn has_expired(&self, expires_at: i64, now: i64) -> bool {
+    now >= expires_at
   }
 
-  fn should_renew(&self, modified_at: i64, now: i64) -> bool {
+  fn should_renew(&self, expires_at: i64, now: i64) -> bool {
     if self.config.renew_threshold_seconds <= 0 {
       return false;
     }
-    let expires_at = self.compute_expires_at(modified_at);
     expires_at - now <= self.config.renew_threshold_seconds
   }
 
@@ -394,21 +360,25 @@ impl<'a> TokenManager<'a> {
       None => return Err(TokenError::NotFound),
     };
     let now = Self::now_epoch();
-    if self.has_expired(record.modified_at, now, ttl_seconds) {
+    if self.has_expired(record.expires_at, now) {
       let _ = self.delete_token(token).await;
       return Err(TokenError::Expired);
     }
 
     let mut renewed = false;
-    if renew_if_needed && self.should_renew(record.modified_at, now) {
-      match self.touch_token(token, record.modified_at, now).await? {
+    if renew_if_needed && self.should_renew(record.expires_at, now) {
+      let new_expires_at = now + ttl_seconds;
+      match self
+        .touch_token(token, record.expires_at, new_expires_at)
+        .await?
+      {
         Some(updated) => {
           record = updated;
           renewed = true;
         }
         None => {
           if let Some(updated) = self.fetch_token(token).await? {
-            if self.has_expired(updated.modified_at, now, ttl_seconds) {
+            if self.has_expired(updated.expires_at, now) {
               let _ = self.delete_token(token).await;
               return Err(TokenError::Expired);
             }
@@ -420,8 +390,7 @@ impl<'a> TokenManager<'a> {
       }
     }
 
-    let expires_at = record.modified_at + ttl_seconds;
-
+    let expires_at = record.expires_at;
     Ok(TokenValidation {
       record,
       renewed,
@@ -453,5 +422,4 @@ impl<'a> TokenManager<'a> {
 pub struct AccessCacheRecord {
   pub access_json: Value,
   pub expires_at: i64,
-  pub modified_at: i64,
 }

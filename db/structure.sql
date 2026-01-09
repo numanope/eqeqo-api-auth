@@ -118,23 +118,16 @@ CREATE TABLE auth.person_service_role (
 CREATE TABLE auth.tokens_cache (
   token TEXT PRIMARY KEY,
   payload JSONB NOT NULL,
-  user_id INTEGER,
-  service_id INTEGER,
-  access_json JSONB,
-  expires_at BIGINT,
-  modified_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
   created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
   updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
 );
-
-CREATE INDEX idx_auth_tokens_modified_at ON auth.tokens_cache(modified_at);
-CREATE INDEX idx_auth_tokens_user_service ON auth.tokens_cache(user_id, service_id);
 
 CREATE TABLE auth.permissions_cache (
   token TEXT REFERENCES auth.tokens_cache(token) ON DELETE CASCADE NOT NULL,
   service_id INTEGER REFERENCES auth.services(id) ON DELETE CASCADE NOT NULL,
   permissions JSONB NOT NULL,
-  modified_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
   created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
   updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
   PRIMARY KEY (token, service_id)

@@ -453,7 +453,7 @@ struct PersonData {
 }
 
 pub async fn get_person_service_info(req: &Request) -> Response {
-  let (db, validation, _) = match require_token_with_renew_no_log(req).await {
+  let (db, validation, token) = match require_token_with_renew_no_log(req).await {
     Ok(result) => result,
     Err(response) => return response,
   };
@@ -507,7 +507,7 @@ pub async fn get_person_service_info(req: &Request) -> Response {
     .as_secs() as i64;
 
   let manager = TokenManager::new(db.pool());
-  let cached_access = match manager.load_access_cache(person_id, service_id).await {
+  let cached_access = match manager.load_access_cache(&token, service_id).await {
     Ok(Some(cache)) if cache.expires_at > now => Some(cache.access_json),
     Ok(_) => None,
     Err(_) => {
@@ -541,7 +541,7 @@ pub async fn get_person_service_info(req: &Request) -> Response {
       "expires_at": expires_at,
     });
     if let Err(_) = manager
-      .store_access_cache(person_id, service_id, &access, now, expires_at)
+      .store_access_cache(&token, service_id, &access, expires_at)
       .await
     {
       return error_response(

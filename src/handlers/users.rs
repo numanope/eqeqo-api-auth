@@ -79,6 +79,44 @@ pub async fn login(req: &Request) -> Response {
   });
 
   let manager = TokenManager::new(db.pool());
+  let now = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_secs() as i64;
+  let existing_token = match sqlx::query_as::<_, (String, i64)>(
+    "SELECT token, expires_at FROM auth.tokens_cache
+      WHERE payload ->> 'user_id' = $1 AND expires_at > $2
+      ORDER BY expires_at DESC
+      LIMIT 1",
+  )
+  .bind(user.id.to_string())
+  .bind(now)
+  .fetch_optional(db.pool())
+  .await
+  {
+    Ok(token) => token,
+    Err(_) => {
+      return error_response(
+        StatusCode::InternalServerError,
+        "login_lookup_failed",
+      );
+    }
+  };
+
+  if let Some((token, expires_at)) = existing_token {
+    log_access(req, false);
+    return Response {
+      status: StatusCode::Ok.to_string(),
+      content_type: "application/json".to_string(),
+      content: json!({
+        "user_token": token,
+        "expires_at": expires_at,
+        "payload": user_payload,
+      })
+      .to_string()
+      .into_bytes(),
+    };
+  }
   let issued = match manager.issue_token(user_payload.clone()).await {
     Ok(issue) => issue,
     Err(_) => {
@@ -149,7 +187,7 @@ pub async fn check_permission(req: &Request) -> Response {
     }
   };
 
-  let (db, validation, _) = match require_token_with_renew_no_log(req).await {
+  let (db, validation, token) = match require_token_with_renew_no_log(req).await {
     Ok(values) => values,
     Err(response) => return response,
   };
@@ -238,7 +276,7 @@ pub async fn check_permission(req: &Request) -> Response {
     .as_secs() as i64;
 
   let manager = TokenManager::new(db.pool());
-  let cached_access = match manager.load_access_cache(user_id, service_id).await {
+  let cached_access = match manager.load_access_cache(&token, service_id).await {
     Ok(Some(cache)) if cache.expires_at > now => Some(cache.access_json),
     Ok(_) => None,
     Err(_) => {
@@ -264,7 +302,7 @@ pub async fn check_permission(req: &Request) -> Response {
       "expires_at": expires_at,
     });
     if let Err(_) = manager
-      .store_access_cache(user_id, service_id, &access, now, expires_at)
+      .store_access_cache(&token, service_id, &access, expires_at)
       .await
     {
       return error_response(StatusCode::InternalServerError, "store_access_cache_failed");

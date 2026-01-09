@@ -34,9 +34,10 @@ Data reference: see `./db/DB.md` (seeded dataset: IDs, users, services, roles, p
 ## 🔐 Auth essentials
 - All protected routes require the `user-token:` header (never pass tokens in URLs).
 - Tokens are cached centrally in `auth.tokens_cache`; renewals write once per request and only when near expiry.
+- Login returns the existing token when still valid; otherwise issues a new one.
 - Logout or user deletion revokes related tokens; a background job prunes expired tokens every ~60 seconds.
 - Minimal logging per request records token, endpoint, timestamp, and IP.
-- Tokens are stored hashed in the cache; user passwords are stored as bcrypt hashes (demo users seeded with bcrypt).
+- Tokens are stored in plaintext in the cache; user passwords are stored as bcrypt hashes (demo users seeded with bcrypt).
 - `/check-permission` uses headers for tokens: `user-token` always, plus `service-token` for backend calls; body only carries `service_id` when needed.
 
 ## 🔎 Auth flows (simple)
@@ -124,8 +125,10 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 
 ## 🔁 Token logic
 - Generated at login (`hash(secret + random + timestamp)`). NO JWT nor similar.
-- Stored centrally in `auth.tokens_cache` with `payload` and `modified_at`; token values are stored hashed (no plaintext).
+- Stored centrally in `auth.tokens_cache` with `payload` and `expires_at`; token values are stored in plaintext.
+- Per-service permission snapshots are stored in `auth.permissions_cache` keyed by `(token, service_id)` with `permissions` and `expires_at`.
 - Tokens are issued per **user** (global); services query permissions via `POST /check-permission`.
+- Each user has a single active token; login reuses it until it expires.
 - All protected requests must include `user-token:` header (no query params). `/auth/login` is the only public route.
 - Short TTL (2–5 min) with atomic renewal near expiry to avoid contention.
 - `/check-permission` reads from cache and only rewrites on renew threshold (no multiple writes per request).
