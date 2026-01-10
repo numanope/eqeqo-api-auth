@@ -59,6 +59,10 @@ VALUES
   ('viewer3', '$2y$10$ozVtHHcWPEhSxJPlIPGXNejQVv/ni2yS/CNJThh1j8Hua5G78cSKO', 'Viewer Three', 'N', 'DNI', '00000015')
 ON CONFLICT (username) DO NOTHING;
 
+UPDATE auth.person
+SET can_register_services = TRUE
+WHERE username IN ('adm1');
+
 -- Service roles
 WITH service_role_pairs (service_name, role_name) AS (
   VALUES

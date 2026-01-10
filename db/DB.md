@@ -48,6 +48,7 @@ Service name is used as the client/app identifier.
 | 14 | viewer2  | Viewer Two  | DNI 00000014 |
 | 15 | viewer3  | Viewer Three | DNI 00000015 |
 Passwords: stored as bcrypt hashes; for demo users the plaintext is `<username>-hash` (e.g., adm1-hash).
+`auth.person.can_register_services` is `FALSE` by default; demo user `adm1` has it set to `TRUE`.
 
 ## Service ↔ Role links (`auth.service_roles`)
 | service_id | role_id | meaning                 |

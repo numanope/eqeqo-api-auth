@@ -26,4 +26,8 @@ sha2 = "0.10"
 bcrypt = "0.15"
 
 [workspace]
-members = ["crates/eqeqo-api-auth-client"]
+members = [
+  ".",
+  "client",
+]
+default-members = ["."]

@@ -107,10 +107,11 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 | **POST** | `/role-permissions` | Assign permission to role. Example: `{"role_id":1,"permission_id":2}` + header `user-token`. |
 | **DELETE** | `/role-permissions` | Remove permission from role. Example: `{"role_id":1,"permission_id":2}` + header `user-token`. |
 | **GET** | `/roles/{id}/permissions` | List role permissions. Header: `user-token`. |
-| **POST** | `/services` | Create service. Example: `{"name":"Stock","description":"Inventory"}` + header `user-token`. |
+| **POST** | `/services` | Create service. Example: `{"name":"Stock","description":"Inventory"}` + header `user-token`. Requires `can_register_services`. |
 | **GET** | `/services` | List services. Header: `user-token`. |
-| **PUT** | `/services/{id}` | Update service. Example: `{"description":"New desc"}` + header `user-token`. |
-| **DELETE** | `/services/{id}` | Delete service. Header: `user-token`. |
+| **PUT** | `/services/{id}` | Update service. Example: `{"description":"New desc"}` + header `user-token`. Requires `can_register_services`. |
+| **DELETE** | `/services/{id}` | Delete service. Header: `user-token`. Requires `can_register_services`. |
+| **POST** | `/services/{id}/token` | Issue service token. Header: `user-token`. Requires `can_register_services`. |
 | **POST** | `/service-roles` | Assign role to service. Example: `{"service_id":1,"role_id":2}` + header `user-token`. |
 | **DELETE** | `/service-roles` | Remove role from service. Example: `{"service_id":1,"role_id":2}` + header `user-token`. |
 | **GET** | `/services/{id}/roles` | List roles of a service. Header: `user-token`. |

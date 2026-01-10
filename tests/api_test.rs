@@ -770,6 +770,37 @@ async fn test_service_create_success() {
 }
 
 #[tokio::test]
+async fn service_create_permission_behaves_as_expected() {
+  boot_server().await;
+  let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"usr1\",\"password\":\"usr1-hash\"}";
+  let expected = b"\"user_token\"";
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
+  let token = login_response
+    .split("\"user_token\":\"")
+    .nth(1)
+    .and_then(|segment| segment.split('"').next())
+    .expect("token value")
+    .to_string();
+
+  let suffix = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_nanos();
+  let service_name = format!("svc_no_perm_{}", suffix);
+  let create_body = format!(
+    "{{\"name\":\"{name}\",\"description\":null}}",
+    name = service_name
+  );
+  let create_request = format!(
+    "POST /services HTTP/1.1\r\nuser-token: {}\r\nContent-Type: application/json\r\n\r\n{}",
+    token, create_body
+  );
+  let request = create_request.as_bytes();
+  let expected = b"insufficient_permissions";
+  run_test(request, expected, Some(SERVER_URL)).await;
+}
+
+#[tokio::test]
 async fn test_service_create_missing_token() {
   boot_server().await;
   let request = b"POST /services HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"name\":\"svc_missing\",\"description\":null}";
@@ -840,6 +871,28 @@ async fn test_service_update_success() {
   );
   let request = update_request.as_bytes();
   let expected = b"\"status\":\"success\"";
+  run_test(request, expected, Some(SERVER_URL)).await;
+}
+
+#[tokio::test]
+async fn service_update_permission_behaves_as_expected() {
+  boot_server().await;
+  let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"usr1\",\"password\":\"usr1-hash\"}";
+  let expected = b"\"user_token\"";
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
+  let token = login_response
+    .split("\"user_token\":\"")
+    .nth(1)
+    .and_then(|segment| segment.split('"').next())
+    .expect("token value")
+    .to_string();
+
+  let update_request = format!(
+    "PUT /services/1 HTTP/1.1\r\nuser-token: {token}\r\nContent-Type: application/json\r\n\r\n{{\"description\":\"Updated\"}}",
+    token = token
+  );
+  let request = update_request.as_bytes();
+  let expected = b"insufficient_permissions";
   run_test(request, expected, Some(SERVER_URL)).await;
 }
 
@@ -940,6 +993,28 @@ async fn test_service_delete_success() {
 }
 
 #[tokio::test]
+async fn service_delete_permission_behaves_as_expected() {
+  boot_server().await;
+  let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"usr1\",\"password\":\"usr1-hash\"}";
+  let expected = b"\"user_token\"";
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
+  let token = login_response
+    .split("\"user_token\":\"")
+    .nth(1)
+    .and_then(|segment| segment.split('"').next())
+    .expect("token value")
+    .to_string();
+
+  let delete_request = format!(
+    "DELETE /services/1 HTTP/1.1\r\nuser-token: {token}\r\n\r\n",
+    token = token
+  );
+  let request = delete_request.as_bytes();
+  let expected = b"insufficient_permissions";
+  run_test(request, expected, Some(SERVER_URL)).await;
+}
+
+#[tokio::test]
 async fn test_service_delete_missing_token() {
   boot_server().await;
   let request = b"DELETE /services/1 HTTP/1.1\r\n\r\n";
@@ -966,6 +1041,26 @@ async fn test_service_delete_invalid_id() {
   );
   let request = delete_request.as_bytes();
   let expected = b"invalid_service_id";
+  run_test(request, expected, Some(SERVER_URL)).await;
+}
+
+#[tokio::test]
+async fn service_token_permission_behaves_as_expected() {
+  boot_server().await;
+  let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"usr1\",\"password\":\"usr1-hash\"}";
+  let expected = b"\"user_token\"";
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
+  let token = login_response
+    .split("\"user_token\":\"")
+    .nth(1)
+    .and_then(|segment| segment.split('"').next())
+    .expect("token value")
+    .to_string();
+
+  let token_request =
+    format!("POST /services/1/token HTTP/1.1\r\nuser-token: {}\r\n\r\n", token);
+  let request = token_request.as_bytes();
+  let expected = b"insufficient_permissions";
   run_test(request, expected, Some(SERVER_URL)).await;
 }
 

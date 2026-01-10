@@ -1,0 +1,10 @@
+[package]
+name = "eqeqo-api-auth-client"
+version = "0.0.1"
+edition = "2024"
+description = "Client utilities for Eqeqo Auth API."
+license = "MIT"
+
+[lib]
+name = "eqeqo_api_auth_client"
+path = "src/lib.rs"

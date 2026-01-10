@@ -53,6 +53,7 @@ CREATE TABLE auth.person (
   person_type auth.person_type NOT NULL DEFAULT 'N',
   document_type auth.document_type NOT NULL DEFAULT 'DNI',
   document_number TEXT NOT NULL,
+  can_register_services BOOLEAN NOT NULL DEFAULT FALSE,
   created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
   updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
   removed_at BIGINT,

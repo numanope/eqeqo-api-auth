@@ -18,9 +18,40 @@ pub struct CreateServicePayload {
   description: Option<String>,
 }
 
-pub async fn create_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_with_renew(req).await {
+async fn require_service_registration(req: &Request) -> Result<crate::database::DB, Response> {
+  let (db, validation, _) = match require_token_with_renew(req).await {
     Ok(tuple) => tuple,
+    Err(response) => return Err(response),
+  };
+  let user_id = match validation
+    .record
+    .payload
+    .get("user_id")
+    .and_then(|value| value.as_i64())
+  {
+    Some(id) => id as i32,
+    None => return Err(error_response(StatusCode::Unauthorized, "invalid_token")),
+  };
+  match sqlx::query_scalar::<_, bool>(
+    "SELECT can_register_services FROM auth.person WHERE id = $1 AND removed_at IS NULL",
+  )
+  .bind(user_id)
+  .fetch_optional(db.pool())
+  .await
+  {
+    Ok(Some(true)) => Ok(db),
+    Ok(Some(false)) => Err(error_response(StatusCode::Forbidden, "insufficient_permissions")),
+    Ok(None) => Err(error_response(StatusCode::Unauthorized, "invalid_token")),
+    Err(_) => Err(error_response(
+      StatusCode::InternalServerError,
+      "service_permission_check_failed",
+    )),
+  }
+}
+
+pub async fn create_service(req: &Request) -> Response {
+  let db = match require_service_registration(req).await {
+    Ok(db) => db,
     Err(response) => return response,
   };
   let payload: CreateServicePayload = match serde_json::from_slice(req.body.as_bytes()) {
@@ -67,8 +98,8 @@ pub struct UpdateServicePayload {
 }
 
 pub async fn update_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_with_renew(req).await {
-    Ok(tuple) => tuple,
+  let db = match require_service_registration(req).await {
+    Ok(db) => db,
     Err(response) => return response,
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
@@ -96,8 +127,8 @@ pub async fn update_service(req: &Request) -> Response {
 }
 
 pub async fn delete_service(req: &Request) -> Response {
-  let (db, _, _) = match require_token_with_renew(req).await {
-    Ok(tuple) => tuple,
+  let db = match require_service_registration(req).await {
+    Ok(db) => db,
     Err(response) => return response,
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
@@ -128,8 +159,8 @@ struct ServiceTokenData {
 }
 
 pub async fn issue_service_token(req: &Request) -> Response {
-  let (db, _, _) = match require_token_with_renew(req).await {
-    Ok(tuple) => tuple,
+  let db = match require_service_registration(req).await {
+    Ok(db) => db,
     Err(response) => return response,
   };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
