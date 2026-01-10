@@ -100,6 +100,6 @@ Passwords: stored as bcrypt hashes; for demo users the plaintext is `<username>-
 Use these IDs for quick manual requests (e.g., `GET /people/7/services/4` with `token` from user `juan`). Refresh by running `psql -U postgres -f db/run_all.sql`.
 
 ## Cache tables
-`auth.tokens_cache`: stores plaintext token, `payload`, and `expires_at` with `created_at` and `updated_at`.
+`auth.tokens_cache`: stores plaintext token, `payload`, and `expires_at` with `created_at` and `updated_at`. Service tokens do not expire and rely on manual revocation.
 
 `auth.permissions_cache`: stores `permissions` by `(token, service_id)` with `expires_at`, `created_at`, and `updated_at`.

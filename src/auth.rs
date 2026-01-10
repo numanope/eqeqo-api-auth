@@ -18,12 +18,10 @@ pub struct TokenRecord {
 pub struct TokenConfig {
   pub ttl_seconds: i64,
   pub renew_threshold_seconds: i64,
-  pub service_ttl_seconds: i64,
 }
 
 impl TokenConfig {
   const DEFAULT_USER_TTL_SECONDS: i64 = 300;
-  const DEFAULT_SERVICE_TTL_SECONDS: i64 = 60 * 60 * 24 * 7;
   const DEFAULT_RENEW_THRESHOLD_SECONDS: i64 = 30;
 
   fn load_env_seconds(key: &str, fallback: i64) -> i64 {
@@ -40,14 +38,9 @@ impl TokenConfig {
       "TOKEN_RENEW_THRESHOLD_SECONDS",
       Self::DEFAULT_RENEW_THRESHOLD_SECONDS,
     );
-    let service_ttl_seconds = Self::load_env_seconds(
-      "SERVICE_TOKEN_TTL_SECONDS",
-      Self::DEFAULT_SERVICE_TTL_SECONDS,
-    );
     Self {
       ttl_seconds,
       renew_threshold_seconds,
-      service_ttl_seconds,
     }
   }
 }
@@ -92,10 +85,6 @@ impl<'a> TokenManager<'a> {
 
   pub fn ttl(&self) -> i64 {
     self.config.ttl_seconds
-  }
-
-  pub fn service_ttl(&self) -> i64 {
-    self.config.service_ttl_seconds
   }
 
   fn now_epoch() -> i64 {
@@ -169,8 +158,12 @@ impl<'a> TokenManager<'a> {
     modified_at + self.config.ttl_seconds
   }
 
-  fn compute_service_expires_at(&self, modified_at: i64) -> i64 {
-    modified_at + self.config.service_ttl_seconds
+  fn compute_service_expires_at(&self, _modified_at: i64) -> i64 {
+    Self::non_expiring_expires_at()
+  }
+
+  fn non_expiring_expires_at() -> i64 {
+    i64::MAX - 1
   }
 
   pub async fn issue_token(&self, payload: Value) -> Result<TokenIssue, sqlx::Error> {
@@ -412,9 +405,7 @@ impl<'a> TokenManager<'a> {
     &self,
     token: &str,
   ) -> Result<TokenValidation, TokenError> {
-    self
-      .validate_token_with_ttl(token, false, self.config.service_ttl_seconds)
-      .await
+    self.validate_token_with_ttl(token, false, 0).await
   }
 }
 

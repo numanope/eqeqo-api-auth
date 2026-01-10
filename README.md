@@ -177,5 +177,31 @@ sequenceDiagram
   AUTH-->>UI: 200 Logged out
 ```
 
+SUIGUIENTE IMPLEMENTACION, OMITIR POR AHORA
+## 🧰 Rust client (server-side)
+Location: `crates/eqeqo-api-auth-client`
+
+- Covers all endpoints in this API.
+- Includes an in-memory permission cache (default TTL 60s).
+- You can plug a DB-backed cache by implementing `PermissionCache`.
+
+Example:
+```rust
+use eqeqo_api_auth_client::{ApiAuthClient, ServiceContext};
+use serde_json::json;
+
+let client = ApiAuthClient::new("http://127.0.0.1:7878");
+let login = client.auth_login("adm1", "adm1-hash").await?;
+let user_token = login["user_token"].as_str().unwrap();
+
+let access = client
+  .check_permission(user_token, ServiceContext::service_id(2))
+  .await?;
+
+let created = client
+  .create_service(user_token, json!({ "name": "Stock", "description": "Inventory" }))
+  .await?;
+```
+
 
 MIT © Eqeqo
