@@ -172,10 +172,7 @@ impl<'a> TokenManager<'a> {
     let token = Self::generate_token_value(&secret, now);
     let expires_at = self.compute_expires_at(now);
     self.insert_token(&token, &payload, expires_at).await?;
-    Ok(TokenIssue {
-      token,
-      expires_at,
-    })
+    Ok(TokenIssue { token, expires_at })
   }
 
   pub async fn issue_service_token(
@@ -193,10 +190,7 @@ impl<'a> TokenManager<'a> {
     });
     let expires_at = self.compute_service_expires_at(now);
     self.insert_token(&token, &payload, expires_at).await?;
-    Ok(TokenIssue {
-      token,
-      expires_at,
-    })
+    Ok(TokenIssue { token, expires_at })
   }
 
   pub async fn delete_token(&self, token: &str) -> Result<bool, sqlx::Error> {
@@ -220,15 +214,17 @@ impl<'a> TokenManager<'a> {
   pub async fn delete_access_cache(
     &self,
     user_id: i32,
+    business_id: i32,
     service_id: i32,
   ) -> Result<u64, sqlx::Error> {
     let rows = sqlx::query(
       "DELETE FROM auth.permissions_cache
         WHERE token IN (
           SELECT token FROM auth.tokens_cache WHERE payload ->> 'user_id' = $1
-        ) AND service_id = $2",
+        ) AND business_id = $2 AND service_id = $3",
     )
     .bind(user_id.to_string())
+    .bind(business_id)
     .bind(service_id)
     .execute(self.pool)
     .await?
@@ -243,22 +239,19 @@ impl<'a> TokenManager<'a> {
           SELECT token FROM auth.tokens_cache WHERE payload ->> 'user_id' = $1
         )",
     )
-      .bind(user_id.to_string())
-      .execute(self.pool)
-      .await?
-      .rows_affected();
-    Ok(rows)
-  }
-
-  pub async fn delete_access_cache_for_service(
-    &self,
-    service_id: i32,
-  ) -> Result<u64, sqlx::Error> {
-    let rows = sqlx::query("DELETE FROM auth.permissions_cache WHERE service_id = $1")
-    .bind(service_id)
+    .bind(user_id.to_string())
     .execute(self.pool)
     .await?
     .rows_affected();
+    Ok(rows)
+  }
+
+  pub async fn delete_access_cache_for_service(&self, service_id: i32) -> Result<u64, sqlx::Error> {
+    let rows = sqlx::query("DELETE FROM auth.permissions_cache WHERE service_id = $1")
+      .bind(service_id)
+      .execute(self.pool)
+      .await?
+      .rows_affected();
     Ok(rows)
   }
 
@@ -273,14 +266,16 @@ impl<'a> TokenManager<'a> {
   pub async fn load_access_cache(
     &self,
     token: &str,
+    business_id: i32,
     service_id: i32,
   ) -> Result<Option<AccessCacheRecord>, sqlx::Error> {
     sqlx::query_as::<_, AccessCacheRecord>(
       "SELECT permissions AS access_json, expires_at
         FROM auth.permissions_cache
-        WHERE token = $1 AND service_id = $2",
+        WHERE token = $1 AND business_id = $2 AND service_id = $3",
     )
     .bind(token)
+    .bind(business_id)
     .bind(service_id)
     .fetch_optional(self.pool)
     .await
@@ -289,19 +284,21 @@ impl<'a> TokenManager<'a> {
   pub async fn store_access_cache(
     &self,
     token: &str,
+    business_id: i32,
     service_id: i32,
     access_json: &Value,
     expires_at: i64,
   ) -> Result<(), sqlx::Error> {
     sqlx::query(
       "INSERT INTO auth.permissions_cache
-        (token, service_id, permissions, expires_at)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (token, service_id)
+        (token, business_id, service_id, permissions, expires_at)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (token, business_id, service_id)
         DO UPDATE SET permissions = EXCLUDED.permissions,
           expires_at = EXCLUDED.expires_at",
     )
     .bind(token)
+    .bind(business_id)
     .bind(service_id)
     .bind(access_json)
     .bind(expires_at)
@@ -316,10 +313,10 @@ impl<'a> TokenManager<'a> {
       "DELETE FROM auth.tokens_cache
         WHERE expires_at < $1",
     )
-      .bind(now)
-      .execute(self.pool)
-      .await?
-      .rows_affected();
+    .bind(now)
+    .execute(self.pool)
+    .await?
+    .rows_affected();
     let permissions_rows = sqlx::query(
       "DELETE FROM auth.permissions_cache
         WHERE expires_at < $1",
@@ -401,10 +398,7 @@ impl<'a> TokenManager<'a> {
       .await
   }
 
-  pub async fn validate_service_token(
-    &self,
-    token: &str,
-  ) -> Result<TokenValidation, TokenError> {
+  pub async fn validate_service_token(&self, token: &str) -> Result<TokenValidation, TokenError> {
     self.validate_token_with_ttl(token, false, 0).await
   }
 }

@@ -296,19 +296,78 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION auth.default_business_id()
+RETURNS INT AS $$
+DECLARE
+    v_business_id INT;
+BEGIN
+    SELECT id
+    INTO v_business_id
+    FROM auth.businesses
+    WHERE document_type = 'RUC'
+      AND document_number = '00000000001'
+      AND status = TRUE
+      AND removed_at IS NULL
+    LIMIT 1;
+
+    IF v_business_id IS NULL THEN
+        RAISE EXCEPTION 'default business not found';
+    END IF;
+
+    RETURN v_business_id;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Person assignments to service roles
 CREATE OR REPLACE PROCEDURE auth.assign_role_to_person_in_service(p_person_id INT, p_service_id INT, p_role_id INT) AS $$
 BEGIN
-    INSERT INTO auth.person_service_role (person_id, service_id, role_id)
-    VALUES (p_person_id, p_service_id, p_role_id)
-    ON CONFLICT (person_id, service_id, role_id) DO NOTHING;
+    CALL auth.assign_role_to_person_in_business_service(
+        p_person_id,
+        auth.default_business_id(),
+        p_service_id,
+        p_role_id
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE PROCEDURE auth.assign_role_to_person_in_business_service(
+    p_person_id INT,
+    p_business_id INT,
+    p_service_id INT,
+    p_role_id INT
+) AS $$
+BEGIN
+    INSERT INTO auth.business_users (business_id, person_id)
+    VALUES (p_business_id, p_person_id)
+    ON CONFLICT (business_id, person_id) DO NOTHING;
+
+    INSERT INTO auth.person_service_role (business_id, person_id, service_id, role_id)
+    VALUES (p_business_id, p_person_id, p_service_id, p_role_id)
+    ON CONFLICT (business_id, person_id, service_id, role_id) DO NOTHING;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE PROCEDURE auth.remove_role_from_person_in_service(p_person_id INT, p_service_id INT, p_role_id INT) AS $$
 BEGIN
+    CALL auth.remove_role_from_person_in_business_service(
+        p_person_id,
+        auth.default_business_id(),
+        p_service_id,
+        p_role_id
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE PROCEDURE auth.remove_role_from_person_in_business_service(
+    p_person_id INT,
+    p_business_id INT,
+    p_service_id INT,
+    p_role_id INT
+) AS $$
+BEGIN
     DELETE FROM auth.person_service_role
     WHERE person_id = p_person_id
+      AND business_id = p_business_id
       AND service_id = p_service_id
       AND role_id = p_role_id;
 END;
@@ -322,6 +381,24 @@ BEGIN
     FROM auth.role r
     JOIN auth.person_service_role psr ON r.id = psr.role_id
     WHERE psr.person_id = p_person_id
+      AND psr.business_id = auth.default_business_id()
+      AND psr.service_id = p_service_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION auth.list_person_roles_in_business_service(
+    p_person_id INT,
+    p_business_id INT,
+    p_service_id INT
+)
+RETURNS TABLE(id INT, name TEXT) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT r.id, r.name
+    FROM auth.role r
+    JOIN auth.person_service_role psr ON r.id = psr.role_id
+    WHERE psr.person_id = p_person_id
+      AND psr.business_id = p_business_id
       AND psr.service_id = p_service_id;
 END;
 $$ LANGUAGE plpgsql;
@@ -334,6 +411,7 @@ BEGIN
     FROM auth.person p
     JOIN auth.person_service_role psr ON p.id = psr.person_id
     WHERE psr.service_id = p_service_id
+      AND psr.business_id = auth.default_business_id()
       AND psr.role_id = p_role_id
       AND p.removed_at IS NULL;
 END;
@@ -348,6 +426,33 @@ BEGIN
         JOIN auth.role_permission rp ON rp.role_id = psr.role_id
         JOIN auth.permission p ON rp.permission_id = p.id
         WHERE psr.person_id = p_person_id
+          AND psr.business_id = auth.default_business_id()
+          AND psr.service_id = p_service_id
+          AND p.name = p_permission_name
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION auth.check_person_permission_in_business_service(
+  p_person_id INT,
+  p_business_id INT,
+  p_service_id INT,
+  p_permission_name TEXT
+)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1
+        FROM auth.person_service_role psr
+        JOIN auth.business_users bu
+          ON bu.business_id = psr.business_id
+          AND bu.person_id = psr.person_id
+          AND bu.status = TRUE
+          AND bu.removed_at IS NULL
+        JOIN auth.role_permission rp ON rp.role_id = psr.role_id
+        JOIN auth.permission p ON rp.permission_id = p.id
+        WHERE psr.person_id = p_person_id
+          AND psr.business_id = p_business_id
           AND psr.service_id = p_service_id
           AND p.name = p_permission_name
     );
@@ -362,6 +467,7 @@ BEGIN
     FROM auth.services s
     JOIN auth.person_service_role psr ON s.id = psr.service_id
     WHERE psr.person_id = p_person_id
+      AND psr.business_id = auth.default_business_id()
       AND s.status = TRUE;
 END;
 $$ LANGUAGE plpgsql;

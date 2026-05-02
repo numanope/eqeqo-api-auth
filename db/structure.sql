@@ -83,7 +83,46 @@ CREATE TABLE auth.services (
   status BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+CREATE TABLE auth.businesses (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  legal_name TEXT,
+  document_type auth.document_type,
+  document_number TEXT,
+  status BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  removed_at BIGINT,
+  UNIQUE (document_type, document_number)
+);
+
 -- Linking Tables
+
+CREATE TABLE auth.business_users (
+  id SERIAL PRIMARY KEY,
+  business_id INTEGER REFERENCES auth.businesses(id) ON DELETE CASCADE NOT NULL,
+  person_id INTEGER REFERENCES auth.person(id) ON DELETE CASCADE NOT NULL,
+  status BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  removed_at BIGINT,
+  UNIQUE (business_id, person_id)
+);
+
+CREATE TABLE auth.business_invitations (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  business_id INTEGER REFERENCES auth.businesses(id) ON DELETE CASCADE NOT NULL,
+  service_id INTEGER REFERENCES auth.services(id) ON DELETE CASCADE NOT NULL,
+  role_id INTEGER REFERENCES auth.role(id) ON DELETE CASCADE NOT NULL,
+  created_by_person_id INTEGER REFERENCES auth.person(id) ON DELETE CASCADE NOT NULL,
+  expires_at BIGINT NOT NULL,
+  used_at BIGINT,
+  used_by_person_id INTEGER REFERENCES auth.person(id) ON DELETE SET NULL,
+  created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  removed_at BIGINT
+);
 
 -- Service-Roles (as required by API)
 CREATE TABLE auth.service_roles (
@@ -108,12 +147,13 @@ CREATE TABLE auth.role_permission (
 -- Person-Service-Roles (as required by API, replaces user's person_role)
 CREATE TABLE auth.person_service_role (
   id SERIAL PRIMARY KEY,
+  business_id INTEGER REFERENCES auth.businesses(id) ON DELETE CASCADE NOT NULL,
   person_id INTEGER REFERENCES auth.person(id) ON DELETE CASCADE NOT NULL,
   service_id INTEGER REFERENCES auth.services(id) ON DELETE CASCADE NOT NULL,
   role_id INTEGER REFERENCES auth.role(id) ON DELETE CASCADE NOT NULL,
   created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
   updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
-  UNIQUE (person_id, service_id, role_id)
+  UNIQUE (business_id, person_id, service_id, role_id)
 );
 
 CREATE TABLE auth.tokens_cache (
@@ -126,12 +166,13 @@ CREATE TABLE auth.tokens_cache (
 
 CREATE TABLE auth.permissions_cache (
   token TEXT REFERENCES auth.tokens_cache(token) ON DELETE CASCADE NOT NULL,
+  business_id INTEGER REFERENCES auth.businesses(id) ON DELETE CASCADE NOT NULL,
   service_id INTEGER REFERENCES auth.services(id) ON DELETE CASCADE NOT NULL,
   permissions JSONB NOT NULL,
   expires_at BIGINT NOT NULL,
   created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
   updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
-  PRIMARY KEY (token, service_id)
+  PRIMARY KEY (token, business_id, service_id)
 );
 
 CREATE OR REPLACE FUNCTION auth.set_epoch_audit_fields()
@@ -173,6 +214,21 @@ EXECUTE FUNCTION auth.set_epoch_audit_fields();
 
 CREATE TRIGGER trg_auth_services_audit
 BEFORE INSERT OR UPDATE ON auth.services
+FOR EACH ROW
+EXECUTE FUNCTION auth.set_epoch_audit_fields();
+
+CREATE TRIGGER trg_auth_businesses_audit
+BEFORE INSERT OR UPDATE ON auth.businesses
+FOR EACH ROW
+EXECUTE FUNCTION auth.set_epoch_audit_fields();
+
+CREATE TRIGGER trg_auth_business_users_audit
+BEFORE INSERT OR UPDATE ON auth.business_users
+FOR EACH ROW
+EXECUTE FUNCTION auth.set_epoch_audit_fields();
+
+CREATE TRIGGER trg_auth_business_invitations_audit
+BEFORE INSERT OR UPDATE ON auth.business_invitations
 FOR EACH ROW
 EXECUTE FUNCTION auth.set_epoch_audit_fields();
 

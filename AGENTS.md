@@ -7,6 +7,11 @@
 - Avoid adding dependencies when possible.
 - Apply KISS practices.
 
+# Response Preference
+- Keep answers short and horizontal because the user cannot scroll easily.
+- Avoid long vertical lists; prefer one compact paragraph or one-line flow.
+- If an answer needs length, write it to `rpta.html` and tell the user.
+
 # Commit Rules
 - Keep route handlers small and grouped by resource.
 - Use imperative commit prefixes: `feat:`, `fix:`, `refactor:`, `docs:`. May there be more than one in a single commit.
@@ -25,3 +30,6 @@
 # Testing Guidelines
 - Tests require a seeded DB from `db/run_all.sql`.
 - Use names like `login_behaves_as_expected` for consistency.
+
+# Deployment Preference
+- After finishing code changes for this service, deploy and restart `api-auth` without waiting for an extra request.

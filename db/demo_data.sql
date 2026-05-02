@@ -63,6 +63,21 @@ UPDATE auth.person
 SET can_register_services = TRUE
 WHERE username IN ('adm1');
 
+-- Businesses
+INSERT INTO auth.businesses (
+  name,
+  legal_name,
+  document_type,
+  document_number
+)
+VALUES (
+  'Demo Business',
+  'Demo Business',
+  'RUC',
+  '00000000001'
+)
+ON CONFLICT (document_type, document_number) DO NOTHING;
+
 -- Service roles
 WITH service_role_pairs (service_name, role_name) AS (
   VALUES
@@ -125,10 +140,41 @@ WITH person_service_role_pairs (username, service_name, role_name) AS (
     ('viewer2', 'UI Store', 'Viewer'),
     ('viewer3', 'UI Store', 'Viewer')
 )
-INSERT INTO auth.person_service_role (person_id, service_id, role_id)
-SELECT pe.id, s.id, r.id
+INSERT INTO auth.business_users (business_id, person_id)
+SELECT b.id, pe.id
+FROM person_service_role_pairs psr
+JOIN auth.person pe ON pe.username = psr.username
+CROSS JOIN auth.businesses b
+WHERE b.document_type = 'RUC'
+  AND b.document_number = '00000000001'
+ON CONFLICT (business_id, person_id) DO NOTHING;
+
+WITH person_service_role_pairs (username, service_name, role_name) AS (
+  VALUES
+    ('adm1', 'Service A', 'Admin'),
+    ('usr1', 'Service A', 'User'),
+    ('usr2', 'Service B', 'User'),
+    ('usr3', 'Service C', 'Editor'),
+    ('editor1', 'Service A', 'Admin'),
+    ('editor1', 'Service C', 'Editor'),
+    ('viewer1', 'ui-store', 'Viewer'),
+    ('juan', 'UI Store', 'Viewer'),
+    ('adm2', 'UI Store', 'Admin'),
+    ('adm3', 'UI Store', 'Admin'),
+    ('usr4', 'UI Store', 'User'),
+    ('usr5', 'UI Store', 'User'),
+    ('editor2', 'UI Store', 'Editor'),
+    ('editor3', 'UI Store', 'Editor'),
+    ('viewer2', 'UI Store', 'Viewer'),
+    ('viewer3', 'UI Store', 'Viewer')
+)
+INSERT INTO auth.person_service_role (business_id, person_id, service_id, role_id)
+SELECT b.id, pe.id, s.id, r.id
 FROM person_service_role_pairs psr
 JOIN auth.person pe ON pe.username = psr.username
 JOIN auth.services s ON s.name = psr.service_name
 JOIN auth.role r ON r.name = psr.role_name
-ON CONFLICT (person_id, service_id, role_id) DO NOTHING;
+CROSS JOIN auth.businesses b
+WHERE b.document_type = 'RUC'
+  AND b.document_number = '00000000001'
+ON CONFLICT (business_id, person_id, service_id, role_id) DO NOTHING;

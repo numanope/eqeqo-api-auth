@@ -1,16 +1,16 @@
+use crate::auth::TokenManager;
 use crate::responses::{json_response, json_response_value};
 use httpageboy::{Request, Response, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
-use crate::auth::TokenManager;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::roles::Role;
 use super::users::User;
 use super::{
-  FlexibleId, error_response, load_roles_and_permissions, log_access,
-  require_token_with_renew, require_token_with_renew_no_log, resolve_permission_id,
-  resolve_person_id, resolve_service_id,
+  FlexibleId, default_business_id, error_response, load_roles_and_permissions, log_access,
+  require_token_with_renew, require_token_with_renew_no_log, resolve_business_id,
+  resolve_permission_id, resolve_person_id, resolve_service_id,
 };
 
 #[derive(Deserialize)]
@@ -82,7 +82,10 @@ pub async fn remove_role_from_service(req: &Request) -> Response {
           "invalidate_access_cache_failed",
         );
       }
-      json_response_value(StatusCode::Ok, json!({ "status": "role_removed_from_service" }))
+      json_response_value(
+        StatusCode::Ok,
+        json!({ "status": "role_removed_from_service" }),
+      )
     }
     Err(_) => error_response(
       StatusCode::InternalServerError,
@@ -116,6 +119,7 @@ pub async fn list_service_roles(req: &Request) -> Response {
 
 #[derive(Deserialize)]
 pub struct PersonServiceRolePayload {
+  business_id: Option<FlexibleId>,
   person_id: FlexibleId,
   service_id: FlexibleId,
   role_id: i32,
@@ -138,8 +142,13 @@ pub async fn assign_role_to_person_in_service(req: &Request) -> Response {
     Ok(id) => id,
     Err(response) => return response,
   };
-  match sqlx::query("CALL auth.assign_role_to_person_in_service($1, $2, $3)")
+  let business_id = match resolve_business_id(&db, payload.business_id.as_ref()).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+  match sqlx::query("CALL auth.assign_role_to_person_in_business_service($1, $2, $3, $4)")
     .bind(person_id)
+    .bind(business_id)
     .bind(service_id)
     .bind(payload.role_id)
     .execute(db.pool())
@@ -147,7 +156,10 @@ pub async fn assign_role_to_person_in_service(req: &Request) -> Response {
   {
     Ok(_) => {
       let manager = TokenManager::new(db.pool());
-      if let Err(_) = manager.delete_access_cache(person_id, service_id).await {
+      if let Err(_) = manager
+        .delete_access_cache(person_id, business_id, service_id)
+        .await
+      {
         return error_response(
           StatusCode::InternalServerError,
           "invalidate_access_cache_failed",
@@ -176,8 +188,13 @@ pub async fn remove_role_from_person_in_service(req: &Request) -> Response {
     Ok(id) => id,
     Err(response) => return response,
   };
-  match sqlx::query("CALL auth.remove_role_from_person_in_service($1, $2, $3)")
+  let business_id = match resolve_business_id(&db, payload.business_id.as_ref()).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
+  match sqlx::query("CALL auth.remove_role_from_person_in_business_service($1, $2, $3, $4)")
     .bind(person_id)
+    .bind(business_id)
     .bind(service_id)
     .bind(payload.role_id)
     .execute(db.pool())
@@ -185,13 +202,19 @@ pub async fn remove_role_from_person_in_service(req: &Request) -> Response {
   {
     Ok(_) => {
       let manager = TokenManager::new(db.pool());
-      if let Err(_) = manager.delete_access_cache(person_id, service_id).await {
+      if let Err(_) = manager
+        .delete_access_cache(person_id, business_id, service_id)
+        .await
+      {
         return error_response(
           StatusCode::InternalServerError,
           "invalidate_access_cache_failed",
         );
       }
-      json_response_value(StatusCode::Ok, json!({ "status": "role_removed_from_person" }))
+      json_response_value(
+        StatusCode::Ok,
+        json!({ "status": "role_removed_from_person" }),
+      )
     }
     Err(_) => error_response(StatusCode::InternalServerError, "remove_role_person_failed"),
   }
@@ -264,6 +287,7 @@ pub async fn list_persons_with_role_in_service(req: &Request) -> Response {
 
 #[derive(Deserialize)]
 pub struct PersonServicePermissionPayload {
+  business_id: Option<FlexibleId>,
   person_id: FlexibleId,
   service_id: FlexibleId,
   permission_id: Option<FlexibleId>,
@@ -272,10 +296,11 @@ pub struct PersonServicePermissionPayload {
 
 async fn ensure_direct_role(
   db: &crate::database::DB,
+  business_id: i32,
   person_id: i32,
   service_id: i32,
 ) -> Result<i32, Response> {
-  let role_name = format!("direct:{}:{}", person_id, service_id);
+  let role_name = format!("direct:{}:{}:{}", business_id, person_id, service_id);
 
   let existing = sqlx::query_scalar::<_, i32>("SELECT id FROM auth.role WHERE name = $1")
     .bind(&role_name)
@@ -337,6 +362,10 @@ pub async fn grant_permission_to_person_in_service(req: &Request) -> Response {
     Ok(id) => id,
     Err(response) => return response,
   };
+  let business_id = match resolve_business_id(&db, payload.business_id.as_ref()).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
 
   let permission_identifier = match (payload.permission_id, payload.permission_name) {
     (Some(id), _) => id,
@@ -349,7 +378,7 @@ pub async fn grant_permission_to_person_in_service(req: &Request) -> Response {
     Err(response) => return response,
   };
 
-  let role_id = match ensure_direct_role(&db, person_id, service_id).await {
+  let role_id = match ensure_direct_role(&db, business_id, person_id, service_id).await {
     Ok(id) => id,
     Err(response) => return response,
   };
@@ -379,9 +408,26 @@ pub async fn grant_permission_to_person_in_service(req: &Request) -> Response {
   }
 
   if let Err(_) = sqlx::query(
-    "INSERT INTO auth.person_service_role (person_id, service_id, role_id) VALUES ($1, $2, $3)
-      ON CONFLICT (person_id, service_id, role_id) DO NOTHING",
+    "INSERT INTO auth.business_users (business_id, person_id) VALUES ($1, $2)
+      ON CONFLICT (business_id, person_id) DO NOTHING",
   )
+  .bind(business_id)
+  .bind(person_id)
+  .execute(db.pool())
+  .await
+  {
+    return error_response(
+      StatusCode::InternalServerError,
+      "assign_business_user_failed",
+    );
+  }
+
+  if let Err(_) = sqlx::query(
+    "INSERT INTO auth.person_service_role (business_id, person_id, service_id, role_id)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (business_id, person_id, service_id, role_id) DO NOTHING",
+  )
+  .bind(business_id)
   .bind(person_id)
   .bind(service_id)
   .bind(role_id)
@@ -392,7 +438,10 @@ pub async fn grant_permission_to_person_in_service(req: &Request) -> Response {
   }
 
   let manager = TokenManager::new(db.pool());
-  if let Err(_) = manager.delete_access_cache(person_id, service_id).await {
+  if let Err(_) = manager
+    .delete_access_cache(person_id, business_id, service_id)
+    .await
+  {
     return error_response(
       StatusCode::InternalServerError,
       "invalidate_access_cache_failed",
@@ -403,6 +452,7 @@ pub async fn grant_permission_to_person_in_service(req: &Request) -> Response {
     StatusCode::Ok,
     json!({
       "status": "permission_granted",
+      "business_id": business_id,
       "person_id": person_id,
       "service_id": service_id,
       "permission_id": permission_id,
@@ -454,6 +504,10 @@ pub async fn get_person_service_info(req: &Request) -> Response {
     Ok(id) => id,
     Err(response) => return response,
   };
+  let business_id = match default_business_id(&db).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
 
   let person = match sqlx::query_as::<_, PersonData>(
     "SELECT id, username, name FROM auth.person WHERE id = $1 AND removed_at IS NULL",
@@ -473,14 +527,14 @@ pub async fn get_person_service_info(req: &Request) -> Response {
     .as_secs() as i64;
 
   let manager = TokenManager::new(db.pool());
-  let cached_access = match manager.load_access_cache(&token, service_id).await {
+  let cached_access = match manager
+    .load_access_cache(&token, business_id, service_id)
+    .await
+  {
     Ok(Some(cache)) if cache.expires_at > now => Some(cache.access_json),
     Ok(_) => None,
     Err(_) => {
-      return error_response(
-        StatusCode::InternalServerError,
-        "load_access_cache_failed",
-      );
+      return error_response(StatusCode::InternalServerError, "load_access_cache_failed");
     }
   };
   let used_cache = cached_access.is_some();
@@ -493,13 +547,15 @@ pub async fn get_person_service_info(req: &Request) -> Response {
       .unwrap_or_else(|| json!([]));
     (roles, permissions)
   } else {
-    let (roles, permissions) = match load_roles_and_permissions(&db, person_id, service_id).await {
-      Ok(result) => result,
-      Err(response) => return response,
-    };
+    let (roles, permissions) =
+      match load_roles_and_permissions(&db, person_id, business_id, service_id).await {
+        Ok(result) => result,
+        Err(response) => return response,
+      };
     let expires_at = now + manager.ttl();
     let access = json!({
       "user_id": person_id,
+      "business_id": business_id,
       "service_id": service_id,
       "roles": roles,
       "permissions": permissions,
@@ -507,13 +563,10 @@ pub async fn get_person_service_info(req: &Request) -> Response {
       "expires_at": expires_at,
     });
     if let Err(_) = manager
-      .store_access_cache(&token, service_id, &access, expires_at)
+      .store_access_cache(&token, business_id, service_id, &access, expires_at)
       .await
     {
-      return error_response(
-        StatusCode::InternalServerError,
-        "store_access_cache_failed",
-      );
+      return error_response(StatusCode::InternalServerError, "store_access_cache_failed");
     }
     (json!(roles), json!(permissions))
   };
@@ -524,6 +577,7 @@ pub async fn get_person_service_info(req: &Request) -> Response {
     StatusCode::Ok,
     json!({
       "user": person,
+      "business_id": business_id,
       "service_id": service_id,
       "roles": roles,
       "permissions": permissions,

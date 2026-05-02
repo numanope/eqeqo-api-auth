@@ -274,22 +274,71 @@ pub(super) async fn resolve_person_id(db: &DB, identifier: &FlexibleId) -> Resul
   Err(error_response(StatusCode::BadRequest, "invalid_person_id"))
 }
 
+pub(super) async fn default_business_id(db: &DB) -> Result<i32, Response> {
+  sqlx::query_scalar::<_, i32>("SELECT auth.default_business_id()")
+    .fetch_one(db.pool())
+    .await
+    .map_err(|_| error_response(StatusCode::InternalServerError, "resolve_business_failed"))
+}
+
+pub(super) async fn resolve_business_id(
+  db: &DB,
+  identifier: Option<&FlexibleId>,
+) -> Result<i32, Response> {
+  let Some(identifier) = identifier else {
+    return Err(error_response(
+      StatusCode::BadRequest,
+      "missing_business_id",
+    ));
+  };
+  let Some(id) = identifier.parse_int() else {
+    return Err(error_response(
+      StatusCode::BadRequest,
+      "invalid_business_id",
+    ));
+  };
+  match sqlx::query_scalar::<_, bool>(
+    "SELECT status FROM auth.businesses WHERE id = $1 AND removed_at IS NULL",
+  )
+  .bind(id)
+  .fetch_optional(db.pool())
+  .await
+  {
+    Ok(Some(true)) => Ok(id),
+    Ok(_) => Err(error_response(
+      StatusCode::BadRequest,
+      "invalid_business_id",
+    )),
+    Err(_) => Err(error_response(
+      StatusCode::InternalServerError,
+      "resolve_business_failed",
+    )),
+  }
+}
+
 pub(super) async fn load_roles_and_permissions(
   db: &DB,
   person_id: i32,
+  business_id: i32,
   service_id: i32,
 ) -> Result<(Vec<String>, Vec<String>), Response> {
   let permissions = match sqlx::query_scalar::<_, String>(
     "SELECT name FROM (
       SELECT DISTINCT p.id, p.name
       FROM auth.person_service_role psr
+      JOIN auth.business_users bu
+        ON bu.business_id = psr.business_id
+        AND bu.person_id = psr.person_id
+        AND bu.status = TRUE
+        AND bu.removed_at IS NULL
       JOIN auth.role_permission rp ON rp.role_id = psr.role_id
       JOIN auth.permission p ON p.id = rp.permission_id
-      WHERE psr.person_id = $1 AND psr.service_id = $2
+      WHERE psr.person_id = $1 AND psr.business_id = $2 AND psr.service_id = $3
     ) perms
     ORDER BY id",
   )
   .bind(person_id)
+  .bind(business_id)
   .bind(service_id)
   .fetch_all(db.pool())
   .await
@@ -305,10 +354,16 @@ pub(super) async fn load_roles_and_permissions(
 
   let roles = match sqlx::query_scalar::<_, String>(
     "SELECT r.name FROM auth.person_service_role psr
+      JOIN auth.business_users bu
+        ON bu.business_id = psr.business_id
+        AND bu.person_id = psr.person_id
+        AND bu.status = TRUE
+        AND bu.removed_at IS NULL
       JOIN auth.role r ON r.id = psr.role_id
-      WHERE psr.person_id = $1 AND psr.service_id = $2",
+      WHERE psr.person_id = $1 AND psr.business_id = $2 AND psr.service_id = $3",
   )
   .bind(person_id)
+  .bind(business_id)
   .bind(service_id)
   .fetch_all(db.pool())
   .await
@@ -325,12 +380,14 @@ pub(super) async fn load_roles_and_permissions(
   Ok((roles, permissions))
 }
 
+mod businesses;
 mod permissions;
 mod relations;
 mod roles;
 mod services;
 mod users;
 
+pub use businesses::*;
 pub use permissions::*;
 pub use relations::*;
 pub use roles::*;

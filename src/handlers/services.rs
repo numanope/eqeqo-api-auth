@@ -41,7 +41,10 @@ async fn require_service_registration(req: &Request) -> Result<crate::database::
   .await
   {
     Ok(Some(true)) => Ok(db),
-    Ok(Some(false)) => Err(error_response(StatusCode::Forbidden, "insufficient_permissions")),
+    Ok(Some(false)) => Err(error_response(
+      StatusCode::Forbidden,
+      "insufficient_permissions",
+    )),
     Ok(None) => Err(error_response(StatusCode::Unauthorized, "invalid_token")),
     Err(_) => Err(error_response(
       StatusCode::InternalServerError,

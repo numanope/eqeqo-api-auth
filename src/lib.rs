@@ -6,7 +6,10 @@ mod database;
 mod handlers;
 mod responses;
 pub use httpageboy::{Request, Response, Rt, Server, StatusCode, handler};
-use std::sync::{OnceLock, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+  OnceLock,
+  atomic::{AtomicBool, Ordering},
+};
 use tokio::time::{self, Duration};
 
 pub mod test_utils {
@@ -94,9 +97,43 @@ pub async fn create_server(server_url: &str) -> Server {
 
   // Auth
   server.add_route("/auth/login", Rt::POST, handler!(login));
+  server.add_route("/auth/register", Rt::POST, handler!(register_user));
   server.add_route("/auth/logout", Rt::POST, handler!(logout));
   server.add_route("/auth/profile", Rt::GET, handler!(profile));
   server.add_route("/check-permission", Rt::POST, handler!(check_permission));
+
+  // Businesses
+  server.add_route("/me/businesses", Rt::GET, handler!(list_my_businesses));
+  server.add_route("/me/businesses", Rt::POST, handler!(create_my_business));
+  server.add_route("/businesses", Rt::GET, handler!(list_businesses));
+  server.add_route("/businesses", Rt::POST, handler!(create_business));
+  server.add_route("/businesses/{id}", Rt::PUT, handler!(update_business));
+  server.add_route("/businesses/{id}", Rt::DELETE, handler!(delete_business));
+  server.add_route(
+    "/businesses/{id}/users",
+    Rt::GET,
+    handler!(list_business_users),
+  );
+  server.add_route(
+    "/business-users",
+    Rt::POST,
+    handler!(assign_user_to_business),
+  );
+  server.add_route(
+    "/business-users",
+    Rt::DELETE,
+    handler!(remove_user_from_business),
+  );
+  server.add_route(
+    "/business-invitations",
+    Rt::POST,
+    handler!(create_business_invitation),
+  );
+  server.add_route(
+    "/business-invitations/accept",
+    Rt::POST,
+    handler!(accept_business_invitation),
+  );
 
   // Users
   server.add_route("/users", Rt::GET, handler!(list_people));
@@ -108,7 +145,11 @@ pub async fn create_server(server_url: &str) -> Server {
   // Services
   server.add_route("/services", Rt::GET, handler!(list_services));
   server.add_route("/services", Rt::POST, handler!(create_service));
-  server.add_route("/services/{id}/token", Rt::POST, handler!(issue_service_token));
+  server.add_route(
+    "/services/{id}/token",
+    Rt::POST,
+    handler!(issue_service_token),
+  );
   server.add_route("/services/{id}", Rt::PUT, handler!(update_service));
   server.add_route("/services/{id}", Rt::DELETE, handler!(delete_service));
 

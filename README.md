@@ -56,21 +56,46 @@ Data reference: see `./db/DB.md` (seeded dataset: IDs, users, services, roles, p
 - Logout or user deletion revokes related tokens; a background job prunes expired tokens every ~60 seconds.
 - Minimal logging per request records token, endpoint, timestamp, and IP.
 - Tokens are stored in plaintext in the cache; user passwords are stored as bcrypt hashes (demo users seeded with bcrypt).
-- `/check-permission` uses headers for tokens: `user-token` always, plus `service-token` for backend calls; body only carries `service_id` when needed.
+- `/check-permission` uses headers for tokens: `user-token` always, plus `service-token` for backend calls; body must carry `business_id` and only carries `service_id` when no service token is used.
 
 ## 🔎 Auth flows (simple)
 **Frontend or unsafe clients**
 - Client sends only the `user-token` header.
+- Client calls `GET /me/businesses` after login to obtain allowed businesses.
+- Client stores the selected `business_id` in session/UI state.
 - Backend maps public context to internal `service_id`.
-- Backend calls `POST /check-permission` with `user-token` header and body `{ service_id }`.
+- Backend calls `POST /check-permission` with `user-token` header and body `{ business_id, service_id }`.
 - Auth treats requests with `service_id` as frontend/unsafe context.
 - Do not expose a service token or `service_id` to end users.
 
 **Backend to backend**
 - Use `user-token` + `service-token` headers.
-- Call `POST /check-permission` with those headers (body can be `{}`).
+- Call `POST /check-permission` with those headers and body `{ business_id }`.
 - Auth treats requests with `service_token` as backend-to-backend.
 - Service token stays only on the server.
+
+## 🧭 POS business selection flow
+1. Login in `pos` with `POST /auth/login`.
+2. Call `GET /me/businesses` with `user-token`.
+3. If response is empty, block access with a message like "No tienes negocios asignados".
+4. If response has one item, select it automatically.
+5. If response has many items, show a selector and store the chosen `business_id`.
+6. Send the selected `business_id` in every permission check and business API request.
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Demo Business",
+    "legal_name": "Demo Business",
+    "document_type": "RUC",
+    "document_number": "00000000001",
+    "status": true
+  }
+]
+```
 
 ## 🚀 Quick request example
 Example: fetching user data for “Juan” (id `7`) from client `servcli1` using a user token:
@@ -88,7 +113,7 @@ Example: checking permission (frontend/unsafe):
 curl -X POST "http://127.0.0.1:7878/check-permission" \
   -H "user-token: user_tok_example_123" \
   -H "content-type: application/json" \
-  -d '{"service_id":2}'
+  -d '{"business_id":1,"service_id":2}'
 ```
 
 Example: checking permission (backend/safe):
@@ -97,7 +122,7 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
   -H "user-token: user_tok_example_123" \
   -H "service-token: svc_tok_example_456" \
   -H "content-type: application/json" \
-  -d '{}'
+  -d '{"business_id":1}'
 ```
 
 
@@ -106,11 +131,23 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 | Method | Path | Description (minimal example) |
 | ------ | ---- | ----------------------------- |
 | **POST** | `/auth/login` | Issue token for user (global). Example: `{"username":"adm1","password":"adm1-hash"}` |
+| **POST** | `/auth/register` | Public user registration. Example: `{"username":"user1","password_hash":"pass","name":"User","person_type":"N","document_type":"DNI","document_number":"123"}` |
 | **POST** | `/auth/logout` | Revoke current token. Header: `user-token: <value>` |
 | **GET** | `/auth/profile` | Validate and optionally renew token. Header: `user-token: <value>` |
-| **POST** | `/check-permission` | Validate access. Headers: `user-token` and optional `service-token`. Body: `{ "service_id": 2 }` when service token is not used. |
+| **POST** | `/check-permission` | Validate access. Headers: `user-token` and optional `service-token`. Body requires `business_id`: `{ "business_id": 1, "service_id": 2 }` without service token; `{ "business_id": 1 }` with service token. |
+| **GET** | `/me/businesses` | List active businesses assigned to current user. Header: `user-token`. Use this in `pos` to select `business_id`. |
+| **POST** | `/me/businesses` | Create first business for current user. Header: `user-token`. Example: `{"name":"Haití","legal_name":"Haití SAC","document_type":"RUC","document_number":"..."}`. Optional `service_id`; default is `UI Store`. User becomes `Admin` for that business/service. |
+| **GET** | `/businesses` | List businesses. Header: `user-token`. Requires `can_register_services`. |
+| **POST** | `/businesses` | Create business. Example: `{"name":"Haití","legal_name":"Haití SAC","document_type":"RUC","document_number":"..."}` + header `user-token`. Requires `can_register_services`. |
+| **PUT** | `/businesses/{id}` | Update business. Same body as create, plus optional `"status": true`. Requires `can_register_services`. |
+| **DELETE** | `/businesses/{id}` | Soft-delete business. Header: `user-token`. Requires `can_register_services`. |
+| **GET** | `/businesses/{id}/users` | List users assigned to a business. Header: `user-token`. Requires `can_register_services`. |
+| **POST** | `/business-users` | Assign user to business. Example: `{"business_id":1,"person_id":1}` + header `user-token`. Requires `can_register_services`. |
+| **DELETE** | `/business-users` | Remove user from business. Example: `{"business_id":1,"person_id":1}` + header `user-token`. Requires `can_register_services`. |
+| **POST** | `/business-invitations` | Business admin creates invite. Example: `{"business_id":1,"service_id":49,"role_id":2}` + header `user-token`. |
+| **POST** | `/business-invitations/accept` | Logged user accepts invite. Example: `{"code":"abc123"}` + header `user-token`. |
 | **GET** | `/users` | List users. Header: `user-token: <value>` |
-| **POST** | `/users` | Create user. Example body: `{"username":"user1","password_hash":"pass","name":"User","person_type":"N","document_type":"DNI","document_number":"123"}` + header `user-token`. |
+| **POST** | `/users` | Admin creates user. Same body as `/auth/register` + header `user-token`. |
 | **PUT** | `/users/{id}` | Update user. Example: `{"name":"New Name"}` + header `user-token`. |
 | **DELETE** | `/users/{id}` | Delete user and revoke tokens. Header: `user-token`. |
 | **GET** | `/roles` | List roles. Header: `user-token`. |
@@ -133,29 +170,44 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 | **POST** | `/service-roles` | Assign role to service. Example: `{"service_id":1,"role_id":2}` + header `user-token`. |
 | **DELETE** | `/service-roles` | Remove role from service. Example: `{"service_id":1,"role_id":2}` + header `user-token`. |
 | **GET** | `/services/{id}/roles` | List roles of a service. Header: `user-token`. |
-| **POST** | `/person-service-roles` | Assign role to person in service. Example: `{"person_id":1,"service_id":1,"role_id":2}` + header `user-token`. |
-| **DELETE** | `/person-service-roles` | Remove role from person in service. Example: `{"person_id":1,"service_id":1,"role_id":2}` + header `user-token`. |
+| **POST** | `/person-service-roles` | Assign role to person in business + service. Example: `{"business_id":1,"person_id":1,"service_id":1,"role_id":2}` + header `user-token`. |
+| **DELETE** | `/person-service-roles` | Remove role from person in business + service. Example: `{"business_id":1,"person_id":1,"service_id":1,"role_id":2}` + header `user-token`. |
 | **GET** | `/people/{person_id}/services/{service_id}/roles` | List roles of person in service. Header: `user-token`. |
 | **GET** | `/services/{service_id}/roles/{role_id}/people` | List people with role in service. Header: `user-token`. |
 | **GET** | `/people/{person_id}/services` | List services of a person. Header: `user-token`. |
 | **GET** | `/people/{person_id}/services/{service_id}` | Get user data plus roles/permissions for that service. Header: `user-token`. |
-| **POST** | `/person-service-permissions` | Grant a permission directly to a person in a service (creates/uses a scoped role). Example: `{"person_id":1,"service_id":1,"permission_name":"read"}` + header `user-token`. |
+| **POST** | `/person-service-permissions` | Grant a permission directly to a person in a business + service (creates/uses a scoped role). Example: `{"business_id":1,"person_id":1,"service_id":1,"permission_name":"read"}` + header `user-token`. |
 
 
 ## 🔁 Token logic
 - Generated at login (`hash(secret + random + timestamp)`). NO JWT nor similar.
 - Stored centrally in `auth.tokens_cache` with `payload` and `expires_at`; token values are stored in plaintext.
-- Per-service permission snapshots are stored in `auth.permissions_cache` keyed by `(token, service_id)` with `permissions` and `expires_at`.
+- Per-business, per-service permission snapshots are stored in `auth.permissions_cache` keyed by `(token, business_id, service_id)` with `permissions` and `expires_at`.
 - Tokens are issued per **user** (global); services query permissions via `POST /check-permission`.
 - Each user has a single active token; login reuses it until it expires.
-- All protected requests must include `user-token:` header (no query params). `/auth/login` is the only public route.
+- All protected requests must include `user-token:` header (no query params). Public routes are `/auth/login` and `/auth/register`.
 - Short TTL (2–5 min) with atomic renewal near expiry to avoid contention.
 - `/check-permission` reads from cache and only rewrites on renew threshold (no multiple writes per request).
 - Revocation on logout or user deletion; cleanup job periodically removes expired tokens.
-- Access checks are always `POST /check-permission` with `user-token` header and either body `{ service_id }` or `service-token` header.
+- Access checks are always `POST /check-permission` with `user-token` header and either body `{ business_id, service_id }` or `service-token` header plus body `{ business_id }`; missing `business_id` returns `missing_business_id`.
 - No tokens in URLs.
 - Minimal logging per request: token, endpoint, timestamp, IP.
 - Background cleanup job trims expired tokens every ~60 seconds.
+
+## 🏢 Business permission model
+- Businesses live in `auth.businesses`.
+- User membership lives in `auth.business_users` as `(business_id, person_id)`.
+- User roles live in `auth.person_service_role` as `(business_id, person_id, service_id, role_id)`.
+- Invite codes live in `auth.business_invitations`; accepting one creates `business_users` and `person_service_role`.
+- `POST /me/businesses` creates the current user's first business and assigns `Admin`; it returns the new `business_id`.
+- The seeded demo business is id `1` in fresh demo databases.
+- New clients should never invent the ID; they must read it from `GET /me/businesses`.
+
+## Business invite flow
+Leader clicks "invite user" → `POST /business-invitations` returns `code` → new user registers/login → enters code → `POST /business-invitations/accept` → user now appears in `GET /me/businesses`.
+
+## First business flow
+User registers/login → `GET /me/businesses` returns empty → user creates business with `POST /me/businesses` → response returns `business_id` → POS stores active `business_id`.
 
 
 ## 🧭 Use case diagram
@@ -173,17 +225,17 @@ sequenceDiagram
 
   %% 2. Request from UI to Back
   UI->>BACK: GET /resource\nheaders: user-token
-  Note over BACK: Maps public context to internal service_id
+  Note over BACK: Maps public context to internal business_id + service_id
 
   %% 3. Cache check + request to Out
   alt Valid local cache (<= 1 min)
     BACK-->>UI: responds using backend cache
   else Expired or missing cache, valid token in Out
-    BACK->>AUTH: POST /check-permission\nheaders: user-token\nbody: { service_id }
+    BACK->>AUTH: POST /check-permission\nheaders: user-token\nbody: { business_id, service_id }
     AUTH-->>BACK: { valid: true, payload }
     BACK-->>UI: responds and saves payload in backend cache (1 min)
   else Expired or missing cache, invalid token in Out
-    BACK->>AUTH: POST /check-permission\nheaders: user-token\nbody: { service_id }
+    BACK->>AUTH: POST /check-permission\nheaders: user-token\nbody: { business_id, service_id }
     AUTH-->>BACK: { valid: false }
     BACK-->>UI: 401 Unauthorized
   end

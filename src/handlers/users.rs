@@ -1,14 +1,14 @@
 use crate::auth::TokenManager;
 use crate::responses::{json_response, json_response_value, response_with_body};
-use bcrypt::{hash, verify, DEFAULT_COST};
+use bcrypt::{DEFAULT_COST, hash, verify};
 use httpageboy::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{
-  FlexibleId, error_response, extract_service_token, get_db_connection,
-  load_roles_and_permissions, log_access, require_token_with_renew,
-  require_token_with_renew_no_log, unauthorized_response, with_auth, with_auth_no_renew,
+  FlexibleId, error_response, extract_service_token, get_db_connection, load_roles_and_permissions,
+  log_access, require_token_with_renew, require_token_with_renew_no_log, resolve_business_id,
+  unauthorized_response, with_auth, with_auth_no_renew,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -98,10 +98,7 @@ pub async fn login(req: &Request) -> Response {
     {
       Ok(token) => token,
       Err(_) => {
-        return error_response(
-          StatusCode::InternalServerError,
-          "login_lookup_failed",
-        );
+        return error_response(StatusCode::InternalServerError, "login_lookup_failed");
       }
     };
 
@@ -165,10 +162,11 @@ pub async fn profile(req: &Request) -> Response {
 pub async fn check_permission(req: &Request) -> Response {
   #[derive(Deserialize, Default)]
   struct CheckPermissionRequest {
+    business_id: Option<FlexibleId>,
     service_id: Option<FlexibleId>,
   }
 
-  let payload: CheckPermissionRequest = if req.body.trim().is_empty() {
+  let request_payload: CheckPermissionRequest = if req.body.trim().is_empty() {
     CheckPermissionRequest::default()
   } else {
     match serde_json::from_slice(req.body.as_bytes()) {
@@ -183,11 +181,11 @@ pub async fn check_permission(req: &Request) -> Response {
   };
 
   let service_token = extract_service_token(req);
-  let service_id = payload
+  let service_id = request_payload
     .service_id
     .as_ref()
     .and_then(|id| id.parse_int());
-  if payload.service_id.is_some() && service_id.is_none() {
+  if request_payload.service_id.is_some() && service_id.is_none() {
     return error_response(StatusCode::BadRequest, "invalid_service_id");
   }
   if service_token.is_some() == service_id.is_some() {
@@ -259,6 +257,10 @@ pub async fn check_permission(req: &Request) -> Response {
     Some(user_id) => user_id,
     None => return unauthorized_response("invalid_token"),
   };
+  let business_id = match resolve_business_id(&db, request_payload.business_id.as_ref()).await {
+    Ok(id) => id,
+    Err(response) => return response,
+  };
 
   let now = SystemTime::now()
     .duration_since(UNIX_EPOCH)
@@ -266,7 +268,10 @@ pub async fn check_permission(req: &Request) -> Response {
     .as_secs() as i64;
 
   let manager = TokenManager::new(db.pool());
-  let cached_access = match manager.load_access_cache(&token, service_id).await {
+  let cached_access = match manager
+    .load_access_cache(&token, business_id, service_id)
+    .await
+  {
     Ok(Some(cache)) if cache.expires_at > now => Some(cache.access_json),
     Ok(_) => None,
     Err(_) => {
@@ -278,13 +283,15 @@ pub async fn check_permission(req: &Request) -> Response {
   let access_json = if let Some(access) = cached_access {
     access
   } else {
-    let (roles, permissions) = match load_roles_and_permissions(&db, user_id, service_id).await {
-      Ok(result) => result,
-      Err(response) => return response,
-    };
+    let (roles, permissions) =
+      match load_roles_and_permissions(&db, user_id, business_id, service_id).await {
+        Ok(result) => result,
+        Err(response) => return response,
+      };
     let expires_at = now + manager.ttl();
     let access = json!({
       "user_id": user_id,
+      "business_id": business_id,
       "service_id": service_id,
       "roles": roles,
       "permissions": permissions,
@@ -292,7 +299,7 @@ pub async fn check_permission(req: &Request) -> Response {
       "expires_at": expires_at,
     });
     if let Err(_) = manager
-      .store_access_cache(&token, service_id, &access, expires_at)
+      .store_access_cache(&token, business_id, service_id, &access, expires_at)
       .await
     {
       return error_response(StatusCode::InternalServerError, "store_access_cache_failed");
@@ -331,10 +338,17 @@ pub struct CreateUserPayload {
   document_number: String,
 }
 
-pub async fn create_user(req: &Request) -> Response {
-  let (db, _, _) = match require_token_with_renew(req).await {
-    Ok(tuple) => tuple,
-    Err(response) => return response,
+async fn create_user_from_request(req: &Request, public_registration: bool) -> Response {
+  let db = if public_registration {
+    match get_db_connection().await {
+      Ok(db) => db,
+      Err(response) => return response,
+    }
+  } else {
+    match require_token_with_renew(req).await {
+      Ok((db, _, _)) => db,
+      Err(response) => return response,
+    }
   };
   let payload: CreateUserPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(p) => p,
@@ -381,9 +395,22 @@ pub async fn create_user(req: &Request) -> Response {
   .fetch_one(db.pool())
   .await
   {
-    Ok(user) => json_response(StatusCode::Created, &user),
+    Ok(user) => {
+      if public_registration {
+        log_access(req, false);
+      }
+      json_response(StatusCode::Created, &user)
+    }
     Err(_) => error_response(StatusCode::InternalServerError, "create_user_failed"),
   }
+}
+
+pub async fn register_user(req: &Request) -> Response {
+  create_user_from_request(req, true).await
+}
+
+pub async fn create_user(req: &Request) -> Response {
+  create_user_from_request(req, false).await
 }
 
 pub async fn list_people(req: &Request) -> Response {

@@ -50,6 +50,16 @@ Service name is used as the client/app identifier.
 Passwords: stored as bcrypt hashes; for demo users the plaintext is `<username>-hash` (e.g., adm1-hash).
 `auth.person.can_register_services` is `FALSE` by default; demo user `adm1` has it set to `TRUE`.
 
+## Businesses (`auth.businesses`)
+| id | name          | doc         |
+| -- | ------------- | ----------- |
+| 1  | Demo Business | RUC 00000000001 |
+
+All seeded user-role assignments are scoped to this default business.
+
+## Business users (`auth.business_users`)
+Each seeded person with a service role is linked to business `1`.
+
 ## Service ↔ Role links (`auth.service_roles`)
 | service_id | role_id | meaning                 |
 | ---------- | ------- | ----------------------- |
@@ -78,29 +88,29 @@ Passwords: stored as bcrypt hashes; for demo users the plaintext is `<username>-
 | 3       | 3             | Editor → update         |
 | 4       | 1             | Viewer → read           |
 
-## Person ↔ Service ↔ Role links (`auth.person_service_role`)
-| person_id | service_id | role_id | note                         |
-| --------- | ---------- | ------- | ---------------------------- |
-| 1         | 1          | 1       | adm1 is Admin in Service A   |
-| 2         | 1          | 2       | usr1 is User in Service A    |
-| 3         | 2          | 2       | usr2 is User in Service B    |
-| 4         | 3          | 3       | usr3 is Editor in Service C  |
-| 5         | 1          | 1       | editor1 is Admin in Service A |
-| 5         | 3          | 3       | editor1 is Editor in Service C |
-| 6         | 5          | 4       | viewer1 is Viewer in ui-store |
-| 7         | 4          | 4       | juan is Viewer in UI Store   |
-| 8         | 4          | 1       | adm2 is Admin in UI Store    |
-| 9         | 4          | 1       | adm3 is Admin in UI Store    |
-| 10        | 4          | 2       | usr4 is User in UI Store     |
-| 11        | 4          | 2       | usr5 is User in UI Store     |
-| 12        | 4          | 3       | editor2 is Editor in UI Store |
-| 13        | 4          | 3       | editor3 is Editor in UI Store |
-| 14        | 4          | 4       | viewer2 is Viewer in UI Store |
-| 15        | 4          | 4       | viewer3 is Viewer in UI Store |
+## Business ↔ Person ↔ Service ↔ Role links (`auth.person_service_role`)
+| business_id | person_id | service_id | role_id | note                         |
+| ----------- | --------- | ---------- | ------- | ---------------------------- |
+| 1           | 1         | 1          | 1       | adm1 is Admin in Service A   |
+| 1           | 2         | 1          | 2       | usr1 is User in Service A    |
+| 1           | 3         | 2          | 2       | usr2 is User in Service B    |
+| 1           | 4         | 3          | 3       | usr3 is Editor in Service C  |
+| 1           | 5         | 1          | 1       | editor1 is Admin in Service A |
+| 1           | 5         | 3          | 3       | editor1 is Editor in Service C |
+| 1           | 6         | 5          | 4       | viewer1 is Viewer in ui-store |
+| 1           | 7         | 4          | 4       | juan is Viewer in UI Store   |
+| 1           | 8         | 4          | 1       | adm2 is Admin in UI Store    |
+| 1           | 9         | 4          | 1       | adm3 is Admin in UI Store    |
+| 1           | 10        | 4          | 2       | usr4 is User in UI Store     |
+| 1           | 11        | 4          | 2       | usr5 is User in UI Store     |
+| 1           | 12        | 4          | 3       | editor2 is Editor in UI Store |
+| 1           | 13        | 4          | 3       | editor3 is Editor in UI Store |
+| 1           | 14        | 4          | 4       | viewer2 is Viewer in UI Store |
+| 1           | 15        | 4          | 4       | viewer3 is Viewer in UI Store |
 
 Use these IDs for quick manual requests (e.g., `GET /people/7/services/4` with `token` from user `juan`). Refresh by running `psql -U postgres -f db/run_all.sql`.
 
 ## Cache tables
 `auth.tokens_cache`: stores plaintext token, `payload`, and `expires_at` with `created_at` and `updated_at`. Service tokens do not expire and rely on manual revocation.
 
-`auth.permissions_cache`: stores `permissions` by `(token, service_id)` with `expires_at`, `created_at`, and `updated_at`.
+`auth.permissions_cache`: stores `permissions` by `(token, business_id, service_id)` with `expires_at`, `created_at`, and `updated_at`.
