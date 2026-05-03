@@ -346,27 +346,6 @@ pub async fn create_my_business(req: &Request) -> Response {
     Ok(None) => return error_response(StatusCode::InternalServerError, "admin_role_missing"),
     Err(_) => return error_response(StatusCode::InternalServerError, "load_role_failed"),
   };
-  match sqlx::query_scalar::<_, bool>(
-    "SELECT EXISTS (
-      SELECT 1
-      FROM auth.business_users bu
-      JOIN auth.businesses b ON b.id = bu.business_id
-      WHERE bu.person_id = $1
-        AND bu.status = TRUE
-        AND bu.removed_at IS NULL
-        AND b.status = TRUE
-        AND b.removed_at IS NULL
-    )",
-  )
-  .bind(person_id)
-  .fetch_one(db.pool())
-  .await
-  {
-    Ok(true) => return error_response(StatusCode::Conflict, "user_already_has_business"),
-    Ok(false) => {}
-    Err(_) => return error_response(StatusCode::InternalServerError, "list_my_businesses_failed"),
-  }
-
   let mut tx = match db.pool().begin().await {
     Ok(tx) => tx,
     Err(_) => return error_response(StatusCode::InternalServerError, "db_unavailable"),

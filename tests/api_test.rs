@@ -270,12 +270,50 @@ async fn test_create_my_business_success() {
     token
   );
   let expected = format!("\"document_number\":\"{}\"", business_document);
-  run_test(
+  let my_businesses_response = run_test(
     my_businesses_request.as_bytes(),
     expected.as_bytes(),
     Some(SERVER_URL),
   )
   .await;
+  assert!(my_businesses_response.contains("Updated Business"));
+}
+
+#[tokio::test]
+async fn test_create_my_business_allows_second_business() {
+  boot_server().await;
+  let suffix = unique_suffix();
+  let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
+  let login_response = run_test(request, b"\"user_token\"", Some(SERVER_URL)).await;
+  let token = extract_token_value(&login_response, "user_token");
+
+  let business_document = format!("2{}", suffix);
+  let business_body = format!(
+    "{{\"name\":\"Second Business {}\",\"legal_name\":\"Second Business {} SAC\",\"document_type\":\"RUC\",\"document_number\":\"{}\"}}",
+    suffix, suffix, business_document
+  );
+  let create_business_request = format!(
+    "POST /me/businesses HTTP/1.1\r\nuser-token: {}\r\nContent-Type: application/json\r\n\r\n{}",
+    token, business_body
+  );
+  run_test(
+    create_business_request.as_bytes(),
+    b"\"status\":\"business_created\"",
+    Some(SERVER_URL),
+  )
+  .await;
+
+  let my_businesses_request = format!(
+    "GET /me/businesses HTTP/1.1\r\nuser-token: {}\r\n\r\n",
+    token
+  );
+  let my_businesses_response = run_test(
+    my_businesses_request.as_bytes(),
+    b"\"name\":\"Demo Business\"",
+    Some(SERVER_URL),
+  )
+  .await;
+  assert!(my_businesses_response.contains(&business_document));
 }
 
 #[tokio::test]

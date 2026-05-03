@@ -136,7 +136,7 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 | **GET** | `/auth/profile` | Validate and optionally renew token. Header: `user-token: <value>` |
 | **POST** | `/check-permission` | Validate access. Headers: `user-token` and optional `service-token`. Body requires `business_id`: `{ "business_id": 1, "service_id": 2 }` without service token; `{ "business_id": 1 }` with service token. |
 | **GET** | `/me/businesses` | List active businesses assigned to current user. Header: `user-token`. Use this in `pos` to select `business_id`. |
-| **POST** | `/me/businesses` | Create first business for current user. Header: `user-token`. Example: `{"name":"Haití","legal_name":"Haití SAC","document_type":"RUC","document_number":"..."}`. Optional `service_id`; default is `UI Store`. User becomes `Admin` for that business/service. |
+| **POST** | `/me/businesses` | Create a business for current user. Header: `user-token`. Example: `{"name":"Haití","legal_name":"Haití SAC","document_type":"RUC","document_number":"..."}`. Optional `service_id`; default is `UI Store`. User becomes `Admin` for that business/service. |
 | **GET** | `/businesses` | List businesses. Header: `user-token`. Requires `can_register_services`. |
 | **POST** | `/businesses` | Create business. Example: `{"name":"Haití","legal_name":"Haití SAC","document_type":"RUC","document_number":"..."}` + header `user-token`. Requires `can_register_services`. |
 | **PUT** | `/businesses/{id}` | Update business. Same body as create, plus optional `"status": true`. Requires `can_register_services` or `Admin` role in that business. |
@@ -199,7 +199,7 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 - User membership lives in `auth.business_users` as `(business_id, person_id)`.
 - User roles live in `auth.person_service_role` as `(business_id, person_id, service_id, role_id)`.
 - Invite codes live in `auth.business_invitations`; accepting one creates `business_users` and `person_service_role`.
-- `POST /me/businesses` creates the current user's first business and assigns `Admin`; it returns the new `business_id`.
+- `POST /me/businesses` creates a business for the current user and assigns `Admin`; it returns the new `business_id`.
 - `PUT /businesses/{id}` can be used by a global admin or by an `Admin` of that same business; POS uses this to edit business profile data.
 - The seeded demo business is id `1` in fresh demo databases.
 - New clients should never invent the ID; they must read it from `GET /me/businesses`.
@@ -207,8 +207,8 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 ## Business invite flow
 Leader clicks "invite user" → `POST /business-invitations` returns `code` → new user registers/login → enters code → `POST /business-invitations/accept` → user now appears in `GET /me/businesses`.
 
-## First business flow
-User registers/login → `GET /me/businesses` returns empty → user creates business with `POST /me/businesses` → response returns `business_id` → POS stores active `business_id`.
+## Business creation flow
+User registers/login → user creates business with `POST /me/businesses` → response returns `business_id` → `GET /me/businesses` lists every active business linked to the user → POS stores active `business_id`.
 
 
 ## 🧭 Use case diagram
