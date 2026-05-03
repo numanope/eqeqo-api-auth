@@ -31,6 +31,19 @@ fn extract_token_value(response: &str, key: &str) -> String {
     .to_string()
 }
 
+fn extract_i32_value(response: &str, key: &str) -> i32 {
+  response
+    .split(&format!("\"{}\":", key))
+    .nth(1)
+    .and_then(|segment| {
+      segment
+        .split(|c| c == ',' || c == '}')
+        .next()
+        .and_then(|value| value.parse().ok())
+    })
+    .expect("integer value")
+}
+
 fn unique_suffix() -> String {
   SystemTime::now()
     .duration_since(UNIX_EPOCH)
@@ -229,9 +242,25 @@ async fn test_create_my_business_success() {
     "POST /me/businesses HTTP/1.1\r\nuser-token: {}\r\nContent-Type: application/json\r\n\r\n{}",
     token, business_body
   );
-  run_test(
+  let create_response = run_test(
     create_business_request.as_bytes(),
     b"\"status\":\"business_created\"",
+    Some(SERVER_URL),
+  )
+  .await;
+  let business_id = extract_i32_value(&create_response, "business_id");
+
+  let updated_business_body = format!(
+    "{{\"name\":\"Updated Business {}\",\"legal_name\":\"Updated Business {} SAC\",\"document_type\":\"RUC\",\"document_number\":\"{}\"}}",
+    suffix, suffix, business_document
+  );
+  let update_business_request = format!(
+    "PUT /businesses/{} HTTP/1.1\r\nuser-token: {}\r\nContent-Type: application/json\r\n\r\n{}",
+    business_id, token, updated_business_body
+  );
+  run_test(
+    update_business_request.as_bytes(),
+    b"\"name\":\"Updated Business",
     Some(SERVER_URL),
   )
   .await;

@@ -175,6 +175,36 @@ async fn require_business_role_admin(
   }
 }
 
+async fn require_global_or_business_admin(
+  req: &Request,
+  business_id: i32,
+) -> Result<crate::database::DB, Response> {
+  let (db, validation, _) = match require_token_with_renew(req).await {
+    Ok(tuple) => tuple,
+    Err(response) => return Err(response),
+  };
+  let user_id = token_person_id(&validation)?;
+
+  match sqlx::query_scalar::<_, bool>(
+    "SELECT can_register_services FROM auth.person WHERE id = $1 AND removed_at IS NULL",
+  )
+  .bind(user_id)
+  .fetch_optional(db.pool())
+  .await
+  {
+    Ok(Some(true)) => Ok(db),
+    Ok(Some(false)) => {
+      require_business_role_admin(&db, user_id, business_id).await?;
+      Ok(db)
+    }
+    Ok(None) => Err(error_response(StatusCode::Unauthorized, "invalid_token")),
+    Err(_) => Err(error_response(
+      StatusCode::InternalServerError,
+      "business_permission_check_failed",
+    )),
+  }
+}
+
 pub async fn list_businesses(req: &Request) -> Response {
   let db = match require_business_admin(req).await {
     Ok(db) => db,
@@ -422,13 +452,13 @@ pub async fn create_my_business(req: &Request) -> Response {
 }
 
 pub async fn update_business(req: &Request) -> Response {
-  let db = match require_business_admin(req).await {
-    Ok(db) => db,
-    Err(response) => return response,
-  };
   let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
     Some(id) => id,
     None => return error_response(StatusCode::BadRequest, "invalid_business_id"),
+  };
+  let db = match require_global_or_business_admin(req, id).await {
+    Ok(db) => db,
+    Err(response) => return response,
   };
   let payload: BusinessPayload = match serde_json::from_slice(req.body.as_bytes()) {
     Ok(payload) => payload,

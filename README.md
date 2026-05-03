@@ -139,7 +139,7 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 | **POST** | `/me/businesses` | Create first business for current user. Header: `user-token`. Example: `{"name":"Haití","legal_name":"Haití SAC","document_type":"RUC","document_number":"..."}`. Optional `service_id`; default is `UI Store`. User becomes `Admin` for that business/service. |
 | **GET** | `/businesses` | List businesses. Header: `user-token`. Requires `can_register_services`. |
 | **POST** | `/businesses` | Create business. Example: `{"name":"Haití","legal_name":"Haití SAC","document_type":"RUC","document_number":"..."}` + header `user-token`. Requires `can_register_services`. |
-| **PUT** | `/businesses/{id}` | Update business. Same body as create, plus optional `"status": true`. Requires `can_register_services`. |
+| **PUT** | `/businesses/{id}` | Update business. Same body as create, plus optional `"status": true`. Requires `can_register_services` or `Admin` role in that business. |
 | **DELETE** | `/businesses/{id}` | Soft-delete business. Header: `user-token`. Requires `can_register_services`. |
 | **GET** | `/businesses/{id}/users` | List users assigned to a business. Header: `user-token`. Requires `can_register_services`. |
 | **POST** | `/business-users` | Assign user to business. Example: `{"business_id":1,"person_id":1}` + header `user-token`. Requires `can_register_services`. |
@@ -200,6 +200,7 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 - User roles live in `auth.person_service_role` as `(business_id, person_id, service_id, role_id)`.
 - Invite codes live in `auth.business_invitations`; accepting one creates `business_users` and `person_service_role`.
 - `POST /me/businesses` creates the current user's first business and assigns `Admin`; it returns the new `business_id`.
+- `PUT /businesses/{id}` can be used by a global admin or by an `Admin` of that same business; POS uses this to edit business profile data.
 - The seeded demo business is id `1` in fresh demo databases.
 - New clients should never invent the ID; they must read it from `GET /me/businesses`.
 
