@@ -4,6 +4,8 @@ Pre-seeded data loaded by `db/run_all.sql` (IDs are deterministic because the DB
 
 `db/run_all.sql` also loads `db/authorization_seed.sql` after the demo data. That file seeds the minimal production-oriented authorization catalog without changing database structure.
 
+To add or refresh only the POS/API authorization catalog in an existing database, run `db/authorization_seed.sql` directly. It is idempotent: it uses `ON CONFLICT` and does not drop, delete, or recreate existing data.
+
 ## Services (`auth.services`)
 | id | name       | description                  |
 | -- | ---------- | ---------------------------- |
@@ -63,7 +65,7 @@ These roles are linked to the known services/apps: `pos`, `api-auth`, `api-sales
 
 ## POS test users
 
-All users below belong to the first active demo business selected by `authorization_seed.sql`; in a fresh `db/run_all.sql` database this is business `1`.
+`authorization_seed.sql` creates these users if they do not exist and assigns them to the first active demo business it can find; in a fresh `db/run_all.sql` database this is business `1`.
 They all use password `<username>-hash`.
 Use `POST /check-permission` with body `{"business_id":1,"service_id":"pos"}` in a fresh DB to read their effective POS role and permissions.
 

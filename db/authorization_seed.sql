@@ -277,6 +277,25 @@ JOIN auth.role r ON r.name = sr.role_name
 ON CONFLICT (service_id, role_id) DO NOTHING;
 
 -- Demo POS users for testing each role.
+INSERT INTO auth.person (
+  username,
+  password_hash,
+  name,
+  person_type,
+  document_type,
+  document_number
+)
+VALUES
+  ('adm2', '$2y$10$SWM.3.RJ0HZuaLO6K2cQnOH333kI3aAZ0dciKS0ygzpKSXhTaMLZO', 'Admin Two', 'N', 'DNI', '00000008'),
+  ('adm3', '$2y$10$wfdK67UPuB0m/0Q44joQROgTkFoVIHZUxlkbKLwmmXwloMA298Roa', 'Admin Three', 'N', 'DNI', '00000009'),
+  ('usr4', '$2y$10$Uyf1CyJSImwd36zlmlVpOeAsN1tb7JHsZBDAP8FAl95eFEIfkaIQi', 'User Four', 'N', 'DNI', '00000010'),
+  ('usr5', '$2y$10$3gcUmchkgmEbMI1aznCHxOvHg.71s/p9ugLH/FwFlzHTE4AYUddry', 'User Five', 'N', 'DNI', '00000011'),
+  ('editor2', '$2y$10$4AVVxU9kJnD0EAFa1C.U0eOJLMV.94LJB0HYXZuGVLROZ6nsf5O4e', 'Editor Two', 'N', 'DNI', '00000012'),
+  ('editor3', '$2y$10$IOOvfUEOomm8Zta1mxvs..B3/4TeOmX8OSTQdG/BlA6otIbdz7N0S', 'Editor Three', 'N', 'DNI', '00000013'),
+  ('viewer2', '$2y$10$RLjCvLFpfLSC3MiObka4UeEeNZ0/aRIXLMku1z6dvtoFDxJEpi18y', 'Viewer Two', 'N', 'DNI', '00000014'),
+  ('viewer3', '$2y$10$ozVtHHcWPEhSxJPlIPGXNejQVv/ni2yS/CNJThh1j8Hua5G78cSKO', 'Viewer Three', 'N', 'DNI', '00000015')
+ON CONFLICT (username) DO NOTHING;
+
 WITH pos_role_users (username, role_name) AS (
   VALUES
     ('adm2', 'Owner'),
