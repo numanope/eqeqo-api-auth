@@ -63,6 +63,8 @@ The user-facing roles are:
 
 These roles are linked to the known services/apps: `pos`, `api-auth`, `api-sales`, `api-stocks`, and `api-commercial`.
 
+Full POS role-to-permission matrix: `db/POS_ROLE_PERMISSION_MATRIX.md`.
+
 ## POS test users
 
 `authorization_seed.sql` creates these users if they do not exist and assigns them to the first active demo business it can find; in a fresh `db/run_all.sql` database this is business `1`.
