@@ -69,6 +69,86 @@ async fn test_login_success() {
 }
 
 #[tokio::test]
+async fn test_user_app_settings_patch_and_read() {
+  boot_server().await;
+  let app_id = format!("pos-settings-{}", unique_suffix());
+  let login_request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
+  let login_response = run_test(login_request, b"\"user_token\"", Some(SERVER_URL)).await;
+  let token = extract_token_value(&login_response, "user_token");
+
+  let patch_request = format!(
+    "PATCH /me/settings HTTP/1.1\r\nuser-token: {}\r\nContent-Type: application/json\r\n\r\n{{\"business_id\":1,\"app_id\":\"{}\",\"settings_patch\":{{\"theme\":\"dark\",\"layout\":\"compact\"}}}}",
+    token, app_id
+  );
+  run_test(
+    patch_request.as_bytes(),
+    b"\"settings\":{\"layout\":\"compact\",\"theme\":\"dark\"}",
+    Some(SERVER_URL),
+  )
+  .await;
+
+  let second_patch_request = format!(
+    "PATCH /me/settings HTTP/1.1\r\nuser-token: {}\r\nContent-Type: application/json\r\n\r\n{{\"business_id\":1,\"app_id\":\"{}\",\"settings_patch\":{{\"theme\":\"light\"}}}}",
+    token, app_id
+  );
+  run_test(
+    second_patch_request.as_bytes(),
+    b"\"settings\":{\"layout\":\"compact\",\"theme\":\"light\"}",
+    Some(SERVER_URL),
+  )
+  .await;
+
+  let me_request = format!(
+    "GET /me HTTP/1.1\r\nuser-token: {}\r\nbusiness-id: 1\r\napp-id: {}\r\n\r\n",
+    token, app_id
+  );
+  run_test(
+    me_request.as_bytes(),
+    b"\"settings\":{\"layout\":\"compact\",\"theme\":\"light\"}",
+    Some(SERVER_URL),
+  )
+  .await;
+}
+
+#[tokio::test]
+async fn test_me_returns_businesses_and_settings() {
+  boot_server().await;
+  let app_id = format!("pos-login-{}", unique_suffix());
+  let login_request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";
+  let login_response = run_test(login_request, b"\"user_token\"", Some(SERVER_URL)).await;
+  let token = extract_token_value(&login_response, "user_token");
+
+  let patch_request = format!(
+    "PATCH /me/settings HTTP/1.1\r\nuser-token: {}\r\nContent-Type: application/json\r\n\r\n{{\"business_id\":1,\"app_id\":\"{}\",\"settings_patch\":{{\"density\":\"small\"}}}}",
+    token, app_id
+  );
+  run_test(
+    patch_request.as_bytes(),
+    b"\"settings\":{\"density\":\"small\"}",
+    Some(SERVER_URL),
+  )
+  .await;
+
+  let me_request = format!(
+    "GET /me HTTP/1.1\r\nuser-token: {}\r\nbusiness-id: 1\r\napp-id: {}\r\n\r\n",
+    token, app_id
+  );
+  run_test(
+    me_request.as_bytes(),
+    b"\"settings\":{\"density\":\"small\"}",
+    Some(SERVER_URL),
+  )
+  .await;
+  let me_businesses_request = format!("GET /me HTTP/1.1\r\nuser-token: {}\r\n\r\n", token);
+  run_test(
+    me_businesses_request.as_bytes(),
+    b"\"businesses\"",
+    Some(SERVER_URL),
+  )
+  .await;
+}
+
+#[tokio::test]
 async fn test_login_invalid_password() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"wrong\"}";

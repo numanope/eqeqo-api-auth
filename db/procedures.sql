@@ -471,3 +471,29 @@ BEGIN
       AND s.status = TRUE;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE PROCEDURE auth.patch_user_app_settings(
+    p_business_id INT,
+    p_user_id INT,
+    p_app_id TEXT,
+    p_settings_patch JSONB
+) AS $$
+BEGIN
+    INSERT INTO auth.user_app_settings (
+        business_id,
+        user_id,
+        app_id,
+        settings
+    )
+    VALUES (
+        p_business_id,
+        p_user_id,
+        p_app_id,
+        COALESCE(p_settings_patch, '{}'::jsonb)
+    )
+    ON CONFLICT (business_id, user_id, app_id)
+    DO UPDATE SET
+        settings = auth.user_app_settings.settings || COALESCE(EXCLUDED.settings, '{}'::jsonb),
+        updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT;
+END;
+$$ LANGUAGE plpgsql;

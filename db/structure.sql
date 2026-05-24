@@ -175,6 +175,16 @@ CREATE TABLE auth.permissions_cache (
   PRIMARY KEY (token, business_id, service_id)
 );
 
+CREATE TABLE auth.user_app_settings (
+  id SERIAL PRIMARY KEY,
+  business_id INTEGER REFERENCES auth.businesses(id) ON DELETE CASCADE NOT NULL,
+  user_id INTEGER REFERENCES auth.person(id) ON DELETE CASCADE NOT NULL,
+  app_id TEXT NOT NULL,
+  settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+  UNIQUE (business_id, user_id, app_id)
+);
+
 CREATE OR REPLACE FUNCTION auth.set_epoch_audit_fields()
 RETURNS TRIGGER AS $$
 DECLARE

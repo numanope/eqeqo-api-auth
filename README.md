@@ -61,7 +61,7 @@ Data reference: see `./db/DB.md` (seeded dataset: IDs, users, services, roles, p
 ## 🔎 Auth flows (simple)
 **Frontend or unsafe clients**
 - Client sends only the `user-token` header.
-- Client calls `GET /me/businesses` after login to obtain allowed businesses.
+- Client calls `GET /me` after login to obtain allowed businesses and optional app settings in one request.
 - Client stores the selected `business_id` in session/UI state.
 - Backend maps public context to internal `service_id`.
 - Backend calls `POST /check-permission` with `user-token` header and body `{ business_id, service_id }`.
@@ -76,25 +76,37 @@ Data reference: see `./db/DB.md` (seeded dataset: IDs, users, services, roles, p
 
 ## 🧭 POS business selection flow
 1. Login in `pos` with `POST /auth/login`.
-2. Call `GET /me/businesses` with `user-token`.
-3. If response is empty, block access with a message like "No tienes negocios asignados".
-4. If response has one item, select it automatically.
-5. If response has many items, show a selector and store the chosen `business_id`.
+2. Call `GET /me` with `user-token`; if a business is already active, also send `business-id` and `app-id: pos`.
+3. If `businesses` is empty, block access with a message like "No tienes negocios asignados".
+4. If `businesses` has one item, select it automatically.
+5. If `businesses` has many items, show a selector and store the chosen `business_id`.
 6. Send the selected `business_id` in every permission check and business API request.
 
 Example response:
 
 ```json
-[
-  {
+{
+  "payload": { "user_id": 1, "username": "adm1", "name": "Admin One" },
+  "businesses": [
+    {
+      "id": 1,
+      "name": "Demo Business",
+      "legal_name": "Demo Business",
+      "document_type": "RUC",
+      "document_number": "00000000001",
+      "status": true
+    }
+  ],
+  "active_business": {
     "id": 1,
     "name": "Demo Business",
     "legal_name": "Demo Business",
     "document_type": "RUC",
     "document_number": "00000000001",
     "status": true
-  }
-]
+  },
+  "settings": {}
+}
 ```
 
 ## 🚀 Quick request example
@@ -130,12 +142,14 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 
 | Method | Path | Description (minimal example) |
 | ------ | ---- | ----------------------------- |
-| **POST** | `/auth/login` | Issue token for user (global). Example: `{"username":"adm1","password":"adm1-hash"}` |
+| **POST** | `/auth/login` | Issue token for user (global). Example: `{"username":"adm1","password":"adm1-hash"}`. |
 | **POST** | `/auth/register` | Public user registration. Example: `{"username":"user1","password_hash":"pass","name":"User","person_type":"N","document_type":"DNI","document_number":"123"}` |
 | **POST** | `/auth/logout` | Revoke current token. Header: `user-token: <value>` |
-| **GET** | `/auth/profile` | Validate and optionally renew token. Header: `user-token: <value>` |
+| **GET** | `/auth/profile` | Validate session and optionally renew token. Header: `user-token: <value>`. Returns only token payload, renewal state, and expiration. |
+| **GET** | `/me` | UI startup context. Header: `user-token`; optional `business-id` + `app-id`. Returns user payload, businesses, active business, and settings when applicable. |
+| **PATCH** | `/me/settings` | Merge current user's settings. Header: `user-token`. Example: `{"business_id":1,"app_id":"pos","settings_patch":{"theme":"dark"}}`. |
 | **POST** | `/check-permission` | Validate access. Headers: `user-token` and optional `service-token`. Body requires `business_id`: `{ "business_id": 1, "service_id": 2 }` without service token; `{ "business_id": 1 }` with service token. |
-| **GET** | `/me/businesses` | List active businesses assigned to current user. Header: `user-token`. Use this in `pos` to select `business_id`. |
+| **GET** | `/me/businesses` | List active businesses assigned to current user. Header: `user-token`. Compatibility/specific listing endpoint; POS startup should prefer `GET /me`. |
 | **POST** | `/me/businesses` | Create a business for current user. Header: `user-token`. Example: `{"name":"Haití","legal_name":"Haití SAC","document_type":"RUC","document_number":"..."}`. Optional `service_id`; default is `UI Store`. User becomes `Admin` for that business/service. |
 | **GET** | `/businesses` | List businesses. Header: `user-token`. Requires `can_register_services`. |
 | **POST** | `/businesses` | Create business. Example: `{"name":"Haití","legal_name":"Haití SAC","document_type":"RUC","document_number":"..."}` + header `user-token`. Requires `can_register_services`. |
@@ -186,6 +200,7 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 - Tokens are issued per **user** (global); services query permissions via `POST /check-permission`.
 - Each user has a single active token; login reuses it until it expires.
 - All protected requests must include `user-token:` header (no query params). Public routes are `/auth/login` and `/auth/register`.
+- Settings context uses headers `business-id` and `app-id` on `GET /me`.
 - Short TTL (2–5 min) with atomic renewal near expiry to avoid contention.
 - `/check-permission` reads from cache and only rewrites on renew threshold (no multiple writes per request).
 - Revocation on logout or user deletion; cleanup job periodically removes expired tokens.
@@ -202,13 +217,19 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 - `POST /me/businesses` creates a business for the current user and assigns `Admin`; it returns the new `business_id`.
 - `PUT /businesses/{id}` can be used by a global admin or by an `Admin` of that same business; POS uses this to edit business profile data.
 - The seeded demo business is id `1` in fresh demo databases.
-- New clients should never invent the ID; they must read it from `GET /me/businesses`.
+- New clients should never invent the ID; they must read it from `GET /me` response field `businesses`.
+
+## User app settings
+Settings live in `auth.user_app_settings`, one JSONB row per `(business_id, user_id, app_id)`. POS should store small UI settings there by calling `PATCH /me/settings`; the server shallow-merges `settings_patch` into the current JSON and never stores one giant JSON for all businesses.
+
+## POS startup contract
+After login, POS should call only `GET /me` with `user-token`. If it already has an active business, also send `business-id: <id>` and `app-id: pos`; then use `businesses`, `active_business`, and `settings` from that single response instead of calling `/auth/profile` plus `/me/businesses`.
 
 ## Business invite flow
 Leader clicks "invite user" → `POST /business-invitations` returns `code` → new user registers/login → enters code → `POST /business-invitations/accept` → user now appears in `GET /me/businesses`.
 
 ## Business creation flow
-User registers/login → user creates business with `POST /me/businesses` → response returns `business_id` → `GET /me/businesses` lists every active business linked to the user → POS stores active `business_id`.
+User registers/login → user creates business with `POST /me/businesses` → response returns `business_id` → `GET /me` lists every active business linked to the user → POS stores active `business_id`.
 
 
 ## 🧭 Use case diagram

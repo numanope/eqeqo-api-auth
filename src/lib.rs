@@ -43,6 +43,8 @@ fn build_cors_policy() -> httpageboy::CorsPolicy {
   };
 
   push_unique("user-token");
+  push_unique("business-id");
+  push_unique("app-id");
   if let Ok(extra) = std::env::var("CORS_HEADERS") {
     for header in extra.split(',').map(|h| h.trim()).filter(|h| !h.is_empty()) {
       push_unique(header);
@@ -100,6 +102,8 @@ pub async fn create_server(server_url: &str) -> Server {
   server.add_route("/auth/register", Rt::POST, handler!(register_user));
   server.add_route("/auth/logout", Rt::POST, handler!(logout));
   server.add_route("/auth/profile", Rt::GET, handler!(profile));
+  server.add_route("/me", Rt::GET, handler!(me));
+  server.add_route("/me/settings", Rt::PATCH, handler!(patch_my_settings));
   server.add_route("/check-permission", Rt::POST, handler!(check_permission));
 
   // Businesses
