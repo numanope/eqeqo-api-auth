@@ -2,6 +2,8 @@
 
 Pre-seeded data loaded by `db/run_all.sql` (IDs are deterministic because the DB is recreated each time).
 
+`db/run_all.sql` also loads `db/authorization_seed.sql` after the demo data. That file seeds the minimal production-oriented authorization catalog without changing database structure.
+
 ## Services (`auth.services`)
 | id | name       | description                  |
 | -- | ---------- | ---------------------------- |
@@ -28,6 +30,36 @@ Service name is used as the client/app identifier.
 | 3  | update |
 | 4  | delete |
 | 5  | share  |
+
+The authorization seed adds user-facing permissions with minimal names such as:
+
+- `sales.read`, `sales.create`, `sales.cancel`, `sales.refund`
+- `cash.read`, `cash.open`, `cash.close`, `cash.move`
+- `products.read`, `products.create`, `products.update`, `products.delete`
+- `stock.read`, `stock.move`, `stock.adjust`
+- `purchases.read`, `purchases.create`, `purchases.update`, `purchases.cancel`
+- `contacts.read`, `contacts.create`, `contacts.update`, `contacts.delete`
+- `reports.read`, `reports.export`
+- `users.read`, `users.invite`, `users.update`, `users.delete`
+- `roles.read`, `roles.update`
+- `settings.read`, `settings.update`
+- `tax.read`, `tax.send`, `tax.cancel`
+- `payments.read`, `payments.create`, `payments.refund`
+
+## POS/API roles from `authorization_seed.sql`
+
+The user-facing roles are:
+
+- `Owner`
+- `Manager`
+- `Cashier`
+- `Stock`
+- `Purchase`
+- `Accounting`
+- `Auditor`
+- `Support`
+
+These roles are linked to the known services/apps: `pos`, `api-auth`, `api-sales`, `api-stocks`, and `api-commercial`.
 
 ## People (`auth.person`)
 | id | username | name        | doc        |

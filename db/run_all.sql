@@ -43,4 +43,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT EXECUTE ON FUNCTIONS TO :"db_user"
 \echo 'Loading demo data...'
 \ir demo_data.sql
 
+\echo 'Loading authorization seed...'
+\ir authorization_seed.sql
+
 \echo 'Database setup completed successfully.'
