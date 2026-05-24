@@ -61,6 +61,23 @@ The user-facing roles are:
 
 These roles are linked to the known services/apps: `pos`, `api-auth`, `api-sales`, `api-stocks`, and `api-commercial`.
 
+## POS test users
+
+All users below belong to the first active demo business selected by `authorization_seed.sql`; in a fresh `db/run_all.sql` database this is business `1`.
+They all use password `<username>-hash`.
+Use `POST /check-permission` with body `{"business_id":1,"service_id":"pos"}` in a fresh DB to read their effective POS role and permissions.
+
+| username | password      | POS role   | Intended test profile |
+| -------- | ------------- | ---------- | --------------------- |
+| adm2     | adm2-hash     | Owner      | Full POS/admin access |
+| adm3     | adm3-hash     | Manager    | Daily operations without destructive user/role control |
+| usr4     | usr4-hash     | Cashier    | Sales, quotes, own cash actions and customer creation |
+| editor2  | editor2-hash  | Stock      | Product and inventory operations |
+| editor3  | editor3-hash  | Purchase   | Provider and purchase operations |
+| usr5     | usr5-hash     | Accounting | Money, tax, reports and refunds |
+| viewer2  | viewer2-hash  | Auditor    | Read-only audit plus exports |
+| viewer3  | viewer3-hash  | Support    | Diagnosis/read access without money operations |
+
 ## People (`auth.person`)
 | id | username | name        | doc        |
 | -- | -------- | ----------- | ---------- |

@@ -8,7 +8,7 @@ use serde_json::json;
 use super::{
   FlexibleId, error_response, extract_service_token, get_db_connection, load_roles_and_permissions,
   log_access, require_token_with_renew, require_token_with_renew_no_log, resolve_business_id,
-  unauthorized_response, with_auth, with_auth_no_renew,
+  resolve_service_id, unauthorized_response, with_auth, with_auth_no_renew,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -464,14 +464,7 @@ pub async fn check_permission(req: &Request) -> Response {
   };
 
   let service_token = extract_service_token(req);
-  let service_id = request_payload
-    .service_id
-    .as_ref()
-    .and_then(|id| id.parse_int());
-  if request_payload.service_id.is_some() && service_id.is_none() {
-    return error_response(StatusCode::BadRequest, "invalid_service_id");
-  }
-  if service_token.is_some() == service_id.is_some() {
+  if service_token.is_some() == request_payload.service_id.is_some() {
     return error_response(StatusCode::BadRequest, "invalid_request_body");
   }
 
@@ -513,8 +506,11 @@ pub async fn check_permission(req: &Request) -> Response {
       }
     }
   } else {
-    let service_id = match service_id {
-      Some(id) => id,
+    let service_id = match request_payload.service_id.as_ref() {
+      Some(identifier) => match resolve_service_id(&db, identifier, false).await {
+        Ok(id) => id,
+        Err(response) => return response,
+      },
       None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
     };
     match sqlx::query_scalar::<_, bool>("SELECT status FROM auth.services WHERE id = $1")

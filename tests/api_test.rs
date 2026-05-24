@@ -516,6 +516,23 @@ async fn test_check_permission_service_id_success() {
 }
 
 #[tokio::test]
+async fn test_check_permission_service_name_success() {
+  boot_server().await;
+  let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm2\",\"password\":\"adm2-hash\"}";
+  let expected = b"\"user_token\"";
+  let login_response = run_test(request, expected, Some(SERVER_URL)).await;
+  let token = extract_token_value(&login_response, "user_token");
+
+  let request = format!(
+    "POST /check-permission HTTP/1.1\r\nuser-token: {}\r\nContent-Type: application/json\r\n\r\n{{\"business_id\":1,\"service_id\":\"pos\"}}",
+    token
+  );
+  let response = run_test(request.as_bytes(), b"\"valid\":true", Some(SERVER_URL)).await;
+  assert!(response.contains("\"roles\":[\"Owner\"]"));
+  assert!(response.contains("\"sales.create\""));
+}
+
+#[tokio::test]
 async fn test_check_permission_invalid_service_token() {
   boot_server().await;
   let request = b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}";

@@ -275,3 +275,66 @@ FROM service_role_pairs sr
 JOIN auth.services s ON s.name = sr.service_name
 JOIN auth.role r ON r.name = sr.role_name
 ON CONFLICT (service_id, role_id) DO NOTHING;
+
+-- Demo POS users for testing each role.
+WITH pos_role_users (username, role_name) AS (
+  VALUES
+    ('adm2', 'Owner'),
+    ('adm3', 'Manager'),
+    ('usr4', 'Cashier'),
+    ('editor2', 'Stock'),
+    ('editor3', 'Purchase'),
+    ('usr5', 'Accounting'),
+    ('viewer2', 'Auditor'),
+    ('viewer3', 'Support')
+)
+INSERT INTO auth.business_users (business_id, person_id)
+SELECT b.id, pe.id
+FROM pos_role_users pru
+JOIN auth.person pe ON pe.username = pru.username
+CROSS JOIN LATERAL (
+  SELECT id
+  FROM auth.businesses
+  WHERE status = TRUE
+    AND removed_at IS NULL
+  ORDER BY
+    CASE
+      WHEN document_type = 'RUC' AND document_number = '00000000001' THEN 0
+      ELSE 1
+    END,
+    id
+  LIMIT 1
+) b
+ON CONFLICT (business_id, person_id) DO NOTHING;
+
+WITH pos_role_users (username, role_name) AS (
+  VALUES
+    ('adm2', 'Owner'),
+    ('adm3', 'Manager'),
+    ('usr4', 'Cashier'),
+    ('editor2', 'Stock'),
+    ('editor3', 'Purchase'),
+    ('usr5', 'Accounting'),
+    ('viewer2', 'Auditor'),
+    ('viewer3', 'Support')
+)
+INSERT INTO auth.person_service_role (business_id, person_id, service_id, role_id)
+SELECT b.id, pe.id, s.id, r.id
+FROM pos_role_users pru
+JOIN auth.person pe ON pe.username = pru.username
+JOIN auth.services s ON s.name = 'pos'
+JOIN auth.role r ON r.name = pru.role_name
+CROSS JOIN LATERAL (
+  SELECT id
+  FROM auth.businesses
+  WHERE status = TRUE
+    AND removed_at IS NULL
+  ORDER BY
+    CASE
+      WHEN document_type = 'RUC' AND document_number = '00000000001' THEN 0
+      ELSE 1
+    END,
+    id
+  LIMIT 1
+) b
+ON CONFLICT (business_id, person_id, service_id, role_id) DO NOTHING;

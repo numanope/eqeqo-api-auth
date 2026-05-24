@@ -125,8 +125,10 @@ Example: checking permission (frontend/unsafe):
 curl -X POST "http://127.0.0.1:7878/check-permission" \
   -H "user-token: user_tok_example_123" \
   -H "content-type: application/json" \
-  -d '{"business_id":1,"service_id":2}'
+  -d '{"business_id":1,"service_id":"pos"}'
 ```
+
+Frontend clients may send `service_id` as a short service name such as `pos`; numeric IDs are still accepted for compatibility. Demo POS users by role are documented in `db/DB.md`.
 
 Example: checking permission (backend/safe):
 ```bash
