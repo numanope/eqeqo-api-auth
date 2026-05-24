@@ -130,6 +130,12 @@ curl -X POST "http://127.0.0.1:7878/check-permission" \
 
 Frontend clients may send `service_id` as a short service name such as `pos`; numeric IDs are still accepted for compatibility. Demo POS users by role are documented in `db/DB.md`.
 
+Minimal POS permission flow:
+1. POS logs in and selects an active business.
+2. POS calls `/check-permission` with `user-token` and body `{"business_id":1,"service_id":"pos"}`.
+3. POS stores `access.roles` and `access.permissions` in its local session.
+4. POS uses those permissions for route/menu visibility; backend APIs must still enforce action permissions server-side.
+
 Example: checking permission (backend/safe):
 ```bash
 curl -X POST "http://127.0.0.1:7878/check-permission" \
