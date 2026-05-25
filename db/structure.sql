@@ -109,6 +109,10 @@ CREATE TABLE auth.business_users (
   UNIQUE (business_id, person_id)
 );
 
+CREATE INDEX idx_business_users_person_active
+ON auth.business_users (person_id)
+WHERE status = TRUE AND removed_at IS NULL;
+
 CREATE TABLE auth.business_invitations (
   id SERIAL PRIMARY KEY,
   code TEXT NOT NULL UNIQUE,
