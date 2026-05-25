@@ -67,7 +67,7 @@ Full POS role-to-permission matrix: `db/POS_ROLE_PERMISSION_MATRIX.md`.
 
 ## POS test users
 
-`authorization_seed.sql` creates these users if they do not exist and assigns them to the first active demo business it can find; in a fresh `db/run_all.sql` database this is business `1`.
+`authorization_seed.sql` creates these users if they do not exist and assigns them to the first active demo business it can find; in a fresh `db/run_all.sql` database this is business `1`. Each user is assigned to `pos` and to every backend API where the same role is enabled, so POS-facing calls can pass through `api-sales`, `api-stocks`, and `api-commercial`.
 They all use password `<username>-hash`.
 Use `POST /check-permission` with body `{"business_id":1,"service_id":"pos"}` in a fresh DB to read their effective POS role and permissions.
 

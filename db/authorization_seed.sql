@@ -341,8 +341,9 @@ INSERT INTO auth.person_service_role (business_id, person_id, service_id, role_i
 SELECT b.id, pe.id, s.id, r.id
 FROM pos_role_users pru
 JOIN auth.person pe ON pe.username = pru.username
-JOIN auth.services s ON s.name = 'pos'
+JOIN auth.services s ON s.name IN ('pos', 'api-auth', 'api-sales', 'api-stocks', 'api-commercial')
 JOIN auth.role r ON r.name = pru.role_name
+JOIN auth.service_roles sr ON sr.service_id = s.id AND sr.role_id = r.id
 CROSS JOIN LATERAL (
   SELECT id
   FROM auth.businesses
