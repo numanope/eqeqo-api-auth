@@ -207,32 +207,13 @@ pub(super) async fn resolve_service_id(
     .filter(|s| !s.is_empty())
     .ok_or_else(|| error_response(StatusCode::BadRequest, "invalid_service_id"))?;
 
-  match sqlx::query_scalar::<_, i32>("SELECT id FROM auth.services WHERE name = $1")
+  match sqlx::query_scalar::<_, Option<i32>>("SELECT auth.sp_services_resolve($1, $2)")
     .bind(name)
-    .fetch_optional(db.pool())
+    .bind(create_if_missing)
+    .fetch_one(db.pool())
     .await
   {
     Ok(Some(id)) => Ok(id),
-    Ok(None) if create_if_missing => match sqlx::query_scalar::<_, i32>(
-      "INSERT INTO auth.services (name) VALUES ($1)
-        ON CONFLICT (name) DO NOTHING
-        RETURNING id",
-    )
-    .bind(name)
-    .fetch_optional(db.pool())
-    .await
-    {
-      Ok(Some(id)) => Ok(id),
-      Ok(None) => sqlx::query_scalar::<_, i32>("SELECT id FROM auth.services WHERE name = $1")
-        .bind(name)
-        .fetch_one(db.pool())
-        .await
-        .map_err(|_| error_response(StatusCode::InternalServerError, "resolve_service_failed")),
-      Err(_) => Err(error_response(
-        StatusCode::InternalServerError,
-        "resolve_service_failed",
-      )),
-    },
     Ok(None) => Err(error_response(StatusCode::BadRequest, "invalid_service_id")),
     Err(_) => Err(error_response(
       StatusCode::InternalServerError,
@@ -256,11 +237,11 @@ pub(super) async fn resolve_person_id(db: &DB, identifier: &FlexibleId) -> Resul
     if username.is_empty() {
       return Err(error_response(StatusCode::BadRequest, "invalid_person_id"));
     }
-    return match sqlx::query_scalar::<_, i32>(
-      "SELECT id FROM auth.person WHERE username = $1 AND removed_at IS NULL",
+    return match sqlx::query_scalar::<_, Option<i32>>(
+      "SELECT auth.sp_person_resolve_by_username($1)",
     )
     .bind(username)
-    .fetch_optional(db.pool())
+    .fetch_one(db.pool())
     .await
     {
       Ok(Some(id)) => Ok(id),
@@ -297,12 +278,10 @@ pub(super) async fn resolve_business_id(
       "invalid_business_id",
     ));
   };
-  match sqlx::query_scalar::<_, bool>(
-    "SELECT status FROM auth.businesses WHERE id = $1 AND removed_at IS NULL",
-  )
-  .bind(id)
-  .fetch_optional(db.pool())
-  .await
+  match sqlx::query_scalar::<_, bool>("SELECT auth.sp_business_exists($1)")
+    .bind(id)
+    .fetch_optional(db.pool())
+    .await
   {
     Ok(Some(true)) => Ok(id),
     Ok(_) => Err(error_response(
@@ -322,60 +301,39 @@ pub(super) async fn load_roles_and_permissions(
   business_id: i32,
   service_id: i32,
 ) -> Result<(Vec<String>, Vec<String>), Response> {
-  let permissions = match sqlx::query_scalar::<_, String>(
-    "SELECT name FROM (
-      SELECT DISTINCT p.id, p.name
-      FROM auth.person_service_role psr
-      JOIN auth.business_users bu
-        ON bu.business_id = psr.business_id
-        AND bu.person_id = psr.person_id
-        AND bu.status = TRUE
-        AND bu.removed_at IS NULL
-      JOIN auth.role_permission rp ON rp.role_id = psr.role_id
-      JOIN auth.permission p ON p.id = rp.permission_id
-      WHERE psr.person_id = $1 AND psr.business_id = $2 AND psr.service_id = $3
-    ) perms
-    ORDER BY id",
-  )
-  .bind(person_id)
-  .bind(business_id)
-  .bind(service_id)
-  .fetch_all(db.pool())
-  .await
-  {
-    Ok(perms) => perms,
-    Err(_) => {
-      return Err(error_response(
-        StatusCode::InternalServerError,
-        "load_permissions_failed",
-      ));
-    }
-  };
+  let permissions =
+    match sqlx::query_scalar::<_, String>("SELECT name FROM auth.sp_user_permissions($1, $2, $3)")
+      .bind(person_id)
+      .bind(business_id)
+      .bind(service_id)
+      .fetch_all(db.pool())
+      .await
+    {
+      Ok(perms) => perms,
+      Err(_) => {
+        return Err(error_response(
+          StatusCode::InternalServerError,
+          "load_permissions_failed",
+        ));
+      }
+    };
 
-  let roles = match sqlx::query_scalar::<_, String>(
-    "SELECT r.name FROM auth.person_service_role psr
-      JOIN auth.business_users bu
-        ON bu.business_id = psr.business_id
-        AND bu.person_id = psr.person_id
-        AND bu.status = TRUE
-        AND bu.removed_at IS NULL
-      JOIN auth.role r ON r.id = psr.role_id
-      WHERE psr.person_id = $1 AND psr.business_id = $2 AND psr.service_id = $3",
-  )
-  .bind(person_id)
-  .bind(business_id)
-  .bind(service_id)
-  .fetch_all(db.pool())
-  .await
-  {
-    Ok(list) => list,
-    Err(_) => {
-      return Err(error_response(
-        StatusCode::InternalServerError,
-        "load_roles_failed",
-      ));
-    }
-  };
+  let roles =
+    match sqlx::query_scalar::<_, String>("SELECT name FROM auth.sp_user_roles($1, $2, $3)")
+      .bind(person_id)
+      .bind(business_id)
+      .bind(service_id)
+      .fetch_all(db.pool())
+      .await
+    {
+      Ok(list) => list,
+      Err(_) => {
+        return Err(error_response(
+          StatusCode::InternalServerError,
+          "load_roles_failed",
+        ));
+      }
+    };
 
   Ok((roles, permissions))
 }
@@ -408,9 +366,9 @@ pub(super) async fn resolve_permission_id(
     .filter(|s| !s.is_empty())
     .ok_or_else(|| error_response(StatusCode::BadRequest, "invalid_permission_id"))?;
 
-  match sqlx::query_scalar::<_, i32>("SELECT id FROM auth.permission WHERE name = $1")
+  match sqlx::query_scalar::<_, Option<i32>>("SELECT auth.sp_permissions_resolve($1)")
     .bind(name)
-    .fetch_optional(db.pool())
+    .fetch_one(db.pool())
     .await
   {
     Ok(Some(id)) => Ok(id),

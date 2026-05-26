@@ -118,12 +118,10 @@ async fn require_business_admin(req: &Request) -> Result<crate::database::DB, Re
   };
   let user_id = token_person_id(&validation)?;
 
-  match sqlx::query_scalar::<_, bool>(
-    "SELECT can_register_services FROM auth.person WHERE id = $1 AND removed_at IS NULL",
-  )
-  .bind(user_id)
-  .fetch_optional(db.pool())
-  .await
+  match sqlx::query_scalar::<_, Option<bool>>("SELECT auth.sp_person_can_register_services($1)")
+    .bind(user_id)
+    .fetch_one(db.pool())
+    .await
   {
     Ok(Some(true)) => Ok(db),
     Ok(Some(false)) => Err(error_response(
@@ -143,25 +141,11 @@ async fn require_business_role_admin(
   person_id: i32,
   business_id: i32,
 ) -> Result<(), Response> {
-  match sqlx::query_scalar::<_, bool>(
-    "SELECT EXISTS (
-      SELECT 1
-      FROM auth.person_service_role psr
-      JOIN auth.business_users bu
-        ON bu.business_id = psr.business_id
-        AND bu.person_id = psr.person_id
-        AND bu.status = TRUE
-        AND bu.removed_at IS NULL
-      JOIN auth.role r ON r.id = psr.role_id
-      WHERE psr.person_id = $1
-        AND psr.business_id = $2
-        AND r.name = 'Admin'
-    )",
-  )
-  .bind(person_id)
-  .bind(business_id)
-  .fetch_one(db.pool())
-  .await
+  match sqlx::query_scalar::<_, bool>("SELECT auth.sp_business_role_admin_exists($1, $2)")
+    .bind(person_id)
+    .bind(business_id)
+    .fetch_one(db.pool())
+    .await
   {
     Ok(true) => Ok(()),
     Ok(false) => Err(error_response(
@@ -185,12 +169,10 @@ async fn require_global_or_business_admin(
   };
   let user_id = token_person_id(&validation)?;
 
-  match sqlx::query_scalar::<_, bool>(
-    "SELECT can_register_services FROM auth.person WHERE id = $1 AND removed_at IS NULL",
-  )
-  .bind(user_id)
-  .fetch_optional(db.pool())
-  .await
+  match sqlx::query_scalar::<_, Option<bool>>("SELECT auth.sp_person_can_register_services($1)")
+    .bind(user_id)
+    .fetch_one(db.pool())
+    .await
   {
     Ok(Some(true)) => Ok(db),
     Ok(Some(false)) => {
@@ -211,14 +193,9 @@ pub async fn list_businesses(req: &Request) -> Response {
     Err(response) => return response,
   };
 
-  match sqlx::query_as::<_, Business>(
-    "SELECT id, name, legal_name, document_type::text, document_number, status
-      FROM auth.businesses
-      WHERE removed_at IS NULL
-      ORDER BY id",
-  )
-  .fetch_all(db.pool())
-  .await
+  match sqlx::query_as::<_, Business>("SELECT * FROM auth.sp_list_businesses()")
+    .fetch_all(db.pool())
+    .await
   {
     Ok(businesses) => json_response(StatusCode::Ok, &businesses),
     Err(_) => error_response(StatusCode::InternalServerError, "list_businesses_failed"),
@@ -240,20 +217,10 @@ pub async fn list_my_businesses(req: &Request) -> Response {
     None => return error_response(StatusCode::Unauthorized, "invalid_token"),
   };
 
-  match sqlx::query_as::<_, Business>(
-    "SELECT b.id, b.name, b.legal_name, b.document_type::text, b.document_number, b.status
-      FROM auth.businesses b
-      JOIN auth.business_users bu ON bu.business_id = b.id
-      WHERE bu.person_id = $1
-        AND bu.status = TRUE
-        AND bu.removed_at IS NULL
-        AND b.status = TRUE
-        AND b.removed_at IS NULL
-      ORDER BY b.name, b.id",
-  )
-  .bind(user_id)
-  .fetch_all(db.pool())
-  .await
+  match sqlx::query_as::<_, Business>("SELECT * FROM auth.sp_list_user_businesses($1)")
+    .bind(user_id)
+    .fetch_all(db.pool())
+    .await
   {
     Ok(businesses) => json_response(StatusCode::Ok, &businesses),
     Err(_) => error_response(StatusCode::InternalServerError, "list_my_businesses_failed"),
@@ -278,18 +245,14 @@ pub async fn create_business(req: &Request) -> Response {
     Err(response) => return response,
   };
 
-  match sqlx::query_as::<_, Business>(
-    "INSERT INTO auth.businesses (name, legal_name, document_type, document_number, status)
-      VALUES ($1, $2, $3::auth.document_type, $4, COALESCE($5, TRUE))
-      RETURNING id, name, legal_name, document_type::text, document_number, status",
-  )
-  .bind(name)
-  .bind(normalize_optional(payload.legal_name))
-  .bind(document_type)
-  .bind(normalize_optional(payload.document_number))
-  .bind(payload.status)
-  .fetch_one(db.pool())
-  .await
+  match sqlx::query_as::<_, Business>("SELECT * FROM auth.sp_create_business($1, $2, $3, $4, $5)")
+    .bind(name)
+    .bind(normalize_optional(payload.legal_name))
+    .bind(document_type)
+    .bind(normalize_optional(payload.document_number))
+    .bind(payload.status)
+    .fetch_one(db.pool())
+    .await
   {
     Ok(business) => json_response(StatusCode::Created, &business),
     Err(_) => error_response(StatusCode::InternalServerError, "create_business_failed"),
@@ -322,14 +285,9 @@ pub async fn create_my_business(req: &Request) -> Response {
       Ok(id) => id,
       Err(response) => return response,
     },
-    None => match sqlx::query_scalar::<_, i32>(
-      "SELECT id FROM auth.services
-        WHERE name IN ('UI Store', 'ui-store') AND status = TRUE
-        ORDER BY CASE WHEN name = 'UI Store' THEN 0 ELSE 1 END
-        LIMIT 1",
-    )
-    .fetch_optional(db.pool())
-    .await
+    None => match sqlx::query_scalar::<_, Option<i32>>("SELECT auth.sp_default_store_service()")
+      .fetch_one(db.pool())
+      .await
     {
       Ok(Some(id)) => id,
       Ok(None) => {
@@ -338,84 +296,30 @@ pub async fn create_my_business(req: &Request) -> Response {
       Err(_) => return error_response(StatusCode::InternalServerError, "load_service_failed"),
     },
   };
-  let role_id = match sqlx::query_scalar::<_, i32>("SELECT id FROM auth.role WHERE name = 'Admin'")
-    .fetch_optional(db.pool())
+  let role_id = match sqlx::query_scalar::<_, Option<i32>>("SELECT auth.sp_admin_role_id()")
+    .fetch_one(db.pool())
     .await
   {
     Ok(Some(id)) => id,
     Ok(None) => return error_response(StatusCode::InternalServerError, "admin_role_missing"),
     Err(_) => return error_response(StatusCode::InternalServerError, "load_role_failed"),
   };
-  let mut tx = match db.pool().begin().await {
-    Ok(tx) => tx,
-    Err(_) => return error_response(StatusCode::InternalServerError, "db_unavailable"),
-  };
   let business = match sqlx::query_as::<_, Business>(
-    "INSERT INTO auth.businesses (name, legal_name, document_type, document_number, status)
-      VALUES ($1, $2, $3::auth.document_type, $4, TRUE)
-      RETURNING id, name, legal_name, document_type::text, document_number, status",
+    "SELECT * FROM auth.sp_create_my_business($1, $2, $3, $4, $5, $6, $7)",
   )
+  .bind(person_id)
   .bind(name)
   .bind(normalize_optional(payload.legal_name))
   .bind(document_type)
   .bind(normalize_optional(payload.document_number))
-  .fetch_one(&mut *tx)
+  .bind(service_id)
+  .bind(role_id)
+  .fetch_one(db.pool())
   .await
   {
     Ok(business) => business,
     Err(_) => return error_response(StatusCode::InternalServerError, "create_business_failed"),
   };
-  if sqlx::query(
-    "INSERT INTO auth.business_users (business_id, person_id, status, removed_at)
-      VALUES ($1, $2, TRUE, NULL)
-      ON CONFLICT (business_id, person_id)
-      DO UPDATE SET status = TRUE, removed_at = NULL",
-  )
-  .bind(business.id)
-  .bind(person_id)
-  .execute(&mut *tx)
-  .await
-  .is_err()
-  {
-    return error_response(
-      StatusCode::InternalServerError,
-      "assign_business_user_failed",
-    );
-  }
-  if sqlx::query(
-    "INSERT INTO auth.service_roles (service_id, role_id)
-      VALUES ($1, $2)
-      ON CONFLICT (service_id, role_id) DO NOTHING",
-  )
-  .bind(service_id)
-  .bind(role_id)
-  .execute(&mut *tx)
-  .await
-  .is_err()
-  {
-    return error_response(
-      StatusCode::InternalServerError,
-      "assign_service_role_failed",
-    );
-  }
-  if sqlx::query(
-    "INSERT INTO auth.person_service_role (business_id, person_id, service_id, role_id)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (business_id, person_id, service_id, role_id) DO NOTHING",
-  )
-  .bind(business.id)
-  .bind(person_id)
-  .bind(service_id)
-  .bind(role_id)
-  .execute(&mut *tx)
-  .await
-  .is_err()
-  {
-    return error_response(StatusCode::InternalServerError, "assign_role_person_failed");
-  }
-  if tx.commit().await.is_err() {
-    return error_response(StatusCode::InternalServerError, "create_business_failed");
-  }
   let business_id = business.id;
 
   json_response_value(
@@ -453,14 +357,7 @@ pub async fn update_business(req: &Request) -> Response {
   };
 
   match sqlx::query_as::<_, Business>(
-    "UPDATE auth.businesses
-      SET name = $2,
-        legal_name = $3,
-        document_type = $4::auth.document_type,
-        document_number = $5,
-        status = COALESCE($6, status)
-      WHERE id = $1 AND removed_at IS NULL
-      RETURNING id, name, legal_name, document_type::text, document_number, status",
+    "SELECT * FROM auth.sp_update_business($1, $2, $3, $4, $5, $6)",
   )
   .bind(id)
   .bind(name)
@@ -487,16 +384,12 @@ pub async fn delete_business(req: &Request) -> Response {
     None => return error_response(StatusCode::BadRequest, "invalid_business_id"),
   };
 
-  match sqlx::query(
-    "UPDATE auth.businesses
-      SET status = FALSE, removed_at = EXTRACT(EPOCH FROM NOW())::BIGINT
-      WHERE id = $1 AND removed_at IS NULL",
-  )
-  .bind(id)
-  .execute(db.pool())
-  .await
+  match sqlx::query_scalar::<_, i64>("SELECT auth.sp_delete_business($1)")
+    .bind(id)
+    .fetch_one(db.pool())
+    .await
   {
-    Ok(result) if result.rows_affected() > 0 => json_response_value(
+    Ok(rows) if rows > 0 => json_response_value(
       StatusCode::Ok,
       json!({ "status": "business_deleted", "business_id": id }),
     ),
@@ -522,18 +415,10 @@ pub async fn list_business_users(req: &Request) -> Response {
     None => return error_response(StatusCode::BadRequest, "invalid_business_id"),
   };
 
-  match sqlx::query_as::<_, BusinessUser>(
-    "SELECT bu.business_id, p.id AS person_id, p.username, p.name, bu.status
-      FROM auth.business_users bu
-      JOIN auth.person p ON p.id = bu.person_id
-      WHERE bu.business_id = $1
-        AND bu.removed_at IS NULL
-        AND p.removed_at IS NULL
-      ORDER BY p.username, p.id",
-  )
-  .bind(id)
-  .fetch_all(db.pool())
-  .await
+  match sqlx::query_as::<_, BusinessUser>("SELECT * FROM auth.sp_list_business_users($1)")
+    .bind(id)
+    .fetch_all(db.pool())
+    .await
   {
     Ok(users) => json_response(StatusCode::Ok, &users),
     Err(_) => error_response(
@@ -561,16 +446,11 @@ pub async fn assign_user_to_business(req: &Request) -> Response {
     Err(response) => return response,
   };
 
-  match sqlx::query(
-    "INSERT INTO auth.business_users (business_id, person_id, status, removed_at)
-      VALUES ($1, $2, TRUE, NULL)
-      ON CONFLICT (business_id, person_id)
-      DO UPDATE SET status = TRUE, removed_at = NULL",
-  )
-  .bind(business_id)
-  .bind(person_id)
-  .execute(db.pool())
-  .await
+  match sqlx::query("CALL auth.sp_assign_business_user($1, $2)")
+    .bind(business_id)
+    .bind(person_id)
+    .execute(db.pool())
+    .await
   {
     Ok(_) => json_response_value(
       StatusCode::Ok,
@@ -605,17 +485,13 @@ pub async fn remove_user_from_business(req: &Request) -> Response {
     Err(response) => return response,
   };
 
-  match sqlx::query(
-    "UPDATE auth.business_users
-      SET status = FALSE, removed_at = EXTRACT(EPOCH FROM NOW())::BIGINT
-      WHERE business_id = $1 AND person_id = $2 AND removed_at IS NULL",
-  )
-  .bind(business_id)
-  .bind(person_id)
-  .execute(db.pool())
-  .await
+  match sqlx::query_scalar::<_, i64>("SELECT auth.sp_remove_business_user($1, $2)")
+    .bind(business_id)
+    .bind(person_id)
+    .fetch_one(db.pool())
+    .await
   {
-    Ok(result) if result.rows_affected() > 0 => json_response_value(
+    Ok(rows) if rows > 0 => json_response_value(
       StatusCode::Ok,
       json!({
         "status": "business_user_removed",
@@ -664,11 +540,7 @@ pub async fn create_business_invitation(req: &Request) -> Response {
   let code = generate_invitation_code();
 
   match sqlx::query_as::<_, BusinessInvitation>(
-    "INSERT INTO auth.business_invitations (
-        code, business_id, service_id, role_id, created_by_person_id, expires_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, code, business_id, service_id, role_id, expires_at",
+    "SELECT * FROM auth.sp_create_business_invitation($1, $2, $3, $4, $5, $6)",
   )
   .bind(code)
   .bind(business_id)
@@ -710,15 +582,11 @@ pub async fn accept_business_invitation(req: &Request) -> Response {
     return error_response(StatusCode::BadRequest, "invalid_invitation_code");
   }
 
-  let invitation = match sqlx::query_as::<_, (i32, i32, i32, i32)>(
-    "SELECT id, business_id, service_id, role_id
-      FROM auth.business_invitations
-      WHERE code = $1
-        AND used_at IS NULL
-        AND removed_at IS NULL
-        AND expires_at > $2",
+  let invitation = match sqlx::query_as::<_, (i32, i32, i32)>(
+    "SELECT * FROM auth.sp_accept_business_invitation($1, $2, $3)",
   )
   .bind(code)
+  .bind(person_id)
   .bind(current_epoch())
   .fetch_optional(db.pool())
   .await
@@ -733,73 +601,13 @@ pub async fn accept_business_invitation(req: &Request) -> Response {
     }
   };
 
-  let mut tx = match db.pool().begin().await {
-    Ok(tx) => tx,
-    Err(_) => return error_response(StatusCode::InternalServerError, "db_unavailable"),
-  };
-  if sqlx::query(
-    "INSERT INTO auth.business_users (business_id, person_id, status, removed_at)
-      VALUES ($1, $2, TRUE, NULL)
-      ON CONFLICT (business_id, person_id)
-      DO UPDATE SET status = TRUE, removed_at = NULL",
-  )
-  .bind(invitation.1)
-  .bind(person_id)
-  .execute(&mut *tx)
-  .await
-  .is_err()
-  {
-    return error_response(
-      StatusCode::InternalServerError,
-      "assign_business_user_failed",
-    );
-  }
-  if sqlx::query(
-    "INSERT INTO auth.person_service_role (business_id, person_id, service_id, role_id)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (business_id, person_id, service_id, role_id) DO NOTHING",
-  )
-  .bind(invitation.1)
-  .bind(person_id)
-  .bind(invitation.2)
-  .bind(invitation.3)
-  .execute(&mut *tx)
-  .await
-  .is_err()
-  {
-    return error_response(StatusCode::InternalServerError, "assign_role_person_failed");
-  }
-  if sqlx::query(
-    "UPDATE auth.business_invitations
-      SET used_at = $2, used_by_person_id = $3
-      WHERE id = $1 AND used_at IS NULL",
-  )
-  .bind(invitation.0)
-  .bind(current_epoch())
-  .bind(person_id)
-  .execute(&mut *tx)
-  .await
-  .is_err()
-  {
-    return error_response(
-      StatusCode::InternalServerError,
-      "use_business_invitation_failed",
-    );
-  }
-  if tx.commit().await.is_err() {
-    return error_response(
-      StatusCode::InternalServerError,
-      "accept_business_invitation_failed",
-    );
-  }
-
   json_response_value(
     StatusCode::Ok,
     json!({
       "status": "business_invitation_accepted",
-      "business_id": invitation.1,
-      "service_id": invitation.2,
-      "role_id": invitation.3,
+      "business_id": invitation.0,
+      "service_id": invitation.1,
+      "role_id": invitation.2,
     }),
   )
 }

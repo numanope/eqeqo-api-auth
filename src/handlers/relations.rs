@@ -300,38 +300,10 @@ async fn ensure_direct_role(
   person_id: i32,
   service_id: i32,
 ) -> Result<i32, Response> {
-  let role_name = format!("direct:{}:{}:{}", business_id, person_id, service_id);
-
-  let existing = sqlx::query_scalar::<_, i32>("SELECT id FROM auth.role WHERE name = $1")
-    .bind(&role_name)
-    .fetch_optional(db.pool())
-    .await
-    .map_err(|_| {
-      error_response(
-        StatusCode::InternalServerError,
-        "resolve_direct_role_failed",
-      )
-    })?;
-  if let Some(id) = existing {
-    return Ok(id);
-  }
-
-  let inserted = sqlx::query_scalar::<_, i32>(
-    "INSERT INTO auth.role (name) VALUES ($1)
-      ON CONFLICT (name) DO NOTHING
-      RETURNING id",
-  )
-  .bind(&role_name)
-  .fetch_optional(db.pool())
-  .await
-  .map_err(|_| error_response(StatusCode::InternalServerError, "create_direct_role_failed"))?;
-
-  if let Some(id) = inserted {
-    return Ok(id);
-  }
-
-  sqlx::query_scalar::<_, i32>("SELECT id FROM auth.role WHERE name = $1")
-    .bind(&role_name)
+  sqlx::query_scalar::<_, i32>("SELECT auth.sp_direct_role_resolve($1, $2, $3)")
+    .bind(business_id)
+    .bind(person_id)
+    .bind(service_id)
     .fetch_one(db.pool())
     .await
     .map_err(|_| {
@@ -383,58 +355,16 @@ pub async fn grant_permission_to_person_in_service(req: &Request) -> Response {
     Err(response) => return response,
   };
 
-  if let Err(_) = sqlx::query(
-    "INSERT INTO auth.service_roles (service_id, role_id) VALUES ($1, $2)
-      ON CONFLICT (service_id, role_id) DO NOTHING",
-  )
-  .bind(service_id)
-  .bind(role_id)
-  .execute(db.pool())
-  .await
-  {
-    return error_response(StatusCode::InternalServerError, "link_role_service_failed");
-  }
-
-  if let Err(_) = sqlx::query(
-    "INSERT INTO auth.role_permission (role_id, permission_id) VALUES ($1, $2)
-      ON CONFLICT (role_id, permission_id) DO NOTHING",
-  )
-  .bind(role_id)
-  .bind(permission_id)
-  .execute(db.pool())
-  .await
+  if let Err(_) = sqlx::query("CALL auth.sp_grant_person_permission($1, $2, $3, $4, $5)")
+    .bind(business_id)
+    .bind(person_id)
+    .bind(service_id)
+    .bind(role_id)
+    .bind(permission_id)
+    .execute(db.pool())
+    .await
   {
     return error_response(StatusCode::InternalServerError, "assign_permission_failed");
-  }
-
-  if let Err(_) = sqlx::query(
-    "INSERT INTO auth.business_users (business_id, person_id) VALUES ($1, $2)
-      ON CONFLICT (business_id, person_id) DO NOTHING",
-  )
-  .bind(business_id)
-  .bind(person_id)
-  .execute(db.pool())
-  .await
-  {
-    return error_response(
-      StatusCode::InternalServerError,
-      "assign_business_user_failed",
-    );
-  }
-
-  if let Err(_) = sqlx::query(
-    "INSERT INTO auth.person_service_role (business_id, person_id, service_id, role_id)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (business_id, person_id, service_id, role_id) DO NOTHING",
-  )
-  .bind(business_id)
-  .bind(person_id)
-  .bind(service_id)
-  .bind(role_id)
-  .execute(db.pool())
-  .await
-  {
-    return error_response(StatusCode::InternalServerError, "assign_role_person_failed");
   }
 
   let manager = TokenManager::new(db.pool());
@@ -509,12 +439,10 @@ pub async fn get_person_service_info(req: &Request) -> Response {
     Err(response) => return response,
   };
 
-  let person = match sqlx::query_as::<_, PersonData>(
-    "SELECT id, username, name FROM auth.person WHERE id = $1 AND removed_at IS NULL",
-  )
-  .bind(person_id)
-  .fetch_optional(db.pool())
-  .await
+  let person = match sqlx::query_as::<_, PersonData>("SELECT * FROM auth.sp_get_person_data($1)")
+    .bind(person_id)
+    .fetch_optional(db.pool())
+    .await
   {
     Ok(Some(person)) => person,
     Ok(None) => return error_response(StatusCode::NotFound, "person_not_found"),

@@ -33,6 +33,12 @@ sudo bash deploy/deploy.sh
 
 `db/run_all.sql` recrea la BD. Para refrescar solo permisos/usuarios demo POS, ejecutar `db/authorization_seed.sql`; es idempotente.
 
+## Base de Datos
+
+- La logica SQL de negocio vive en `db/procedures.sql`.
+- El codigo Rust solo debe llamar funciones/procedimientos `auth.*`; no debe guardar consultas directas a tablas.
+- `auth.default_business_id()` usa `RUC 00000000001` como negocio demo; si no existe, usa el primer negocio activo para mantener compatibilidad con endpoints legacy.
+
 ## Autorizacion
 
 - Rutas protegidas: header `user-token`.

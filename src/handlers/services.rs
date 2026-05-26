@@ -33,12 +33,10 @@ async fn require_service_registration(req: &Request) -> Result<crate::database::
     Some(id) => id as i32,
     None => return Err(error_response(StatusCode::Unauthorized, "invalid_token")),
   };
-  match sqlx::query_scalar::<_, bool>(
-    "SELECT can_register_services FROM auth.person WHERE id = $1 AND removed_at IS NULL",
-  )
-  .bind(user_id)
-  .fetch_optional(db.pool())
-  .await
+  match sqlx::query_scalar::<_, Option<bool>>("SELECT auth.sp_person_can_register_services($1)")
+    .bind(user_id)
+    .fetch_one(db.pool())
+    .await
   {
     Ok(Some(true)) => Ok(db),
     Ok(Some(false)) => Err(error_response(
@@ -157,17 +155,16 @@ pub async fn issue_service_token(req: &Request) -> Response {
     None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
   };
 
-  let service = match sqlx::query_as::<_, ServiceTokenData>(
-    "SELECT id, name, status FROM auth.services WHERE id = $1",
-  )
-  .bind(id)
-  .fetch_optional(db.pool())
-  .await
-  {
-    Ok(Some(service)) => service,
-    Ok(None) => return error_response(StatusCode::NotFound, "service_not_found"),
-    Err(_) => return error_response(StatusCode::InternalServerError, "load_service_failed"),
-  };
+  let service =
+    match sqlx::query_as::<_, ServiceTokenData>("SELECT * FROM auth.sp_service_token_data($1)")
+      .bind(id)
+      .fetch_optional(db.pool())
+      .await
+    {
+      Ok(Some(service)) => service,
+      Ok(None) => return error_response(StatusCode::NotFound, "service_not_found"),
+      Err(_) => return error_response(StatusCode::InternalServerError, "load_service_failed"),
+    };
 
   if !service.status {
     return error_response(StatusCode::Forbidden, "service_inactive");

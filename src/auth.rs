@@ -113,25 +113,20 @@ impl<'a> TokenManager<'a> {
     payload: &Value,
     expires_at: i64,
   ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-      "INSERT INTO auth.tokens_cache (token, payload, expires_at)
-        VALUES ($1, $2, $3)",
-    )
-    .bind(token)
-    .bind(payload)
-    .bind(expires_at)
-    .execute(self.pool)
-    .await?;
+    sqlx::query("CALL auth.sp_tokens_insert($1, $2, $3)")
+      .bind(token)
+      .bind(payload)
+      .bind(expires_at)
+      .execute(self.pool)
+      .await?;
     Ok(())
   }
 
   async fn fetch_token(&self, token: &str) -> Result<Option<TokenRecord>, sqlx::Error> {
-    sqlx::query_as::<_, TokenRecord>(
-      "SELECT token, payload, expires_at FROM auth.tokens_cache WHERE token = $1",
-    )
-    .bind(token)
-    .fetch_optional(self.pool)
-    .await
+    sqlx::query_as::<_, TokenRecord>("SELECT * FROM auth.sp_tokens_get($1)")
+      .bind(token)
+      .fetch_optional(self.pool)
+      .await
   }
 
   async fn touch_token(
@@ -140,17 +135,13 @@ impl<'a> TokenManager<'a> {
     previous_expires_at: i64,
     new_expires_at: i64,
   ) -> Result<Option<TokenRecord>, sqlx::Error> {
-    let updated = sqlx::query_as::<_, TokenRecord>(
-      "UPDATE auth.tokens_cache
-        SET expires_at = $1
-        WHERE token = $2 AND expires_at = $3
-        RETURNING token, payload, expires_at",
-    )
-    .bind(new_expires_at)
-    .bind(token)
-    .bind(previous_expires_at)
-    .fetch_optional(self.pool)
-    .await?;
+    let updated =
+      sqlx::query_as::<_, TokenRecord>("SELECT * FROM auth.sp_tokens_touch($1, $2, $3)")
+        .bind(token)
+        .bind(previous_expires_at)
+        .bind(new_expires_at)
+        .fetch_optional(self.pool)
+        .await?;
     Ok(updated)
   }
 
@@ -194,21 +185,19 @@ impl<'a> TokenManager<'a> {
   }
 
   pub async fn delete_token(&self, token: &str) -> Result<bool, sqlx::Error> {
-    let rows = sqlx::query("DELETE FROM auth.tokens_cache WHERE token = $1")
+    let rows = sqlx::query_scalar::<_, i64>("SELECT auth.sp_tokens_delete($1)")
       .bind(token)
-      .execute(self.pool)
-      .await?
-      .rows_affected();
+      .fetch_one(self.pool)
+      .await?;
     Ok(rows > 0)
   }
 
   pub async fn delete_tokens_for_user(&self, user_id: i32) -> Result<u64, sqlx::Error> {
-    let rows = sqlx::query("DELETE FROM auth.tokens_cache WHERE payload ->> 'user_id' = $1")
+    let rows = sqlx::query_scalar::<_, i64>("SELECT auth.sp_tokens_delete_for_user($1)")
       .bind(user_id.to_string())
-      .execute(self.pool)
-      .await?
-      .rows_affected();
-    Ok(rows)
+      .fetch_one(self.pool)
+      .await?;
+    Ok(rows as u64)
   }
 
   pub async fn delete_access_cache(
@@ -217,50 +206,36 @@ impl<'a> TokenManager<'a> {
     business_id: i32,
     service_id: i32,
   ) -> Result<u64, sqlx::Error> {
-    let rows = sqlx::query(
-      "DELETE FROM auth.permissions_cache
-        WHERE token IN (
-          SELECT token FROM auth.tokens_cache WHERE payload ->> 'user_id' = $1
-        ) AND business_id = $2 AND service_id = $3",
-    )
-    .bind(user_id.to_string())
-    .bind(business_id)
-    .bind(service_id)
-    .execute(self.pool)
-    .await?
-    .rows_affected();
-    Ok(rows)
+    let rows = sqlx::query_scalar::<_, i64>("SELECT auth.sp_access_cache_delete($1, $2, $3)")
+      .bind(user_id.to_string())
+      .bind(business_id)
+      .bind(service_id)
+      .fetch_one(self.pool)
+      .await?;
+    Ok(rows as u64)
   }
 
   pub async fn delete_access_cache_for_user(&self, user_id: i32) -> Result<u64, sqlx::Error> {
-    let rows = sqlx::query(
-      "DELETE FROM auth.permissions_cache
-        WHERE token IN (
-          SELECT token FROM auth.tokens_cache WHERE payload ->> 'user_id' = $1
-        )",
-    )
-    .bind(user_id.to_string())
-    .execute(self.pool)
-    .await?
-    .rows_affected();
-    Ok(rows)
+    let rows = sqlx::query_scalar::<_, i64>("SELECT auth.sp_access_cache_delete_for_user($1)")
+      .bind(user_id.to_string())
+      .fetch_one(self.pool)
+      .await?;
+    Ok(rows as u64)
   }
 
   pub async fn delete_access_cache_for_service(&self, service_id: i32) -> Result<u64, sqlx::Error> {
-    let rows = sqlx::query("DELETE FROM auth.permissions_cache WHERE service_id = $1")
+    let rows = sqlx::query_scalar::<_, i64>("SELECT auth.sp_access_cache_delete_for_service($1)")
       .bind(service_id)
-      .execute(self.pool)
-      .await?
-      .rows_affected();
-    Ok(rows)
+      .fetch_one(self.pool)
+      .await?;
+    Ok(rows as u64)
   }
 
   pub async fn clear_access_cache(&self) -> Result<u64, sqlx::Error> {
-    let rows = sqlx::query("DELETE FROM auth.permissions_cache")
-      .execute(self.pool)
-      .await?
-      .rows_affected();
-    Ok(rows)
+    let rows = sqlx::query_scalar::<_, i64>("SELECT auth.sp_access_cache_clear()")
+      .fetch_one(self.pool)
+      .await?;
+    Ok(rows as u64)
   }
 
   pub async fn load_access_cache(
@@ -269,16 +244,12 @@ impl<'a> TokenManager<'a> {
     business_id: i32,
     service_id: i32,
   ) -> Result<Option<AccessCacheRecord>, sqlx::Error> {
-    sqlx::query_as::<_, AccessCacheRecord>(
-      "SELECT permissions AS access_json, expires_at
-        FROM auth.permissions_cache
-        WHERE token = $1 AND business_id = $2 AND service_id = $3",
-    )
-    .bind(token)
-    .bind(business_id)
-    .bind(service_id)
-    .fetch_optional(self.pool)
-    .await
+    sqlx::query_as::<_, AccessCacheRecord>("SELECT * FROM auth.sp_access_cache_get($1, $2, $3)")
+      .bind(token)
+      .bind(business_id)
+      .bind(service_id)
+      .fetch_optional(self.pool)
+      .await
   }
 
   pub async fn store_access_cache(
@@ -289,43 +260,24 @@ impl<'a> TokenManager<'a> {
     access_json: &Value,
     expires_at: i64,
   ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-      "INSERT INTO auth.permissions_cache
-        (token, business_id, service_id, permissions, expires_at)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (token, business_id, service_id)
-        DO UPDATE SET permissions = EXCLUDED.permissions,
-          expires_at = EXCLUDED.expires_at",
-    )
-    .bind(token)
-    .bind(business_id)
-    .bind(service_id)
-    .bind(access_json)
-    .bind(expires_at)
-    .execute(self.pool)
-    .await?;
+    sqlx::query("CALL auth.sp_access_cache_store($1, $2, $3, $4, $5)")
+      .bind(token)
+      .bind(business_id)
+      .bind(service_id)
+      .bind(access_json)
+      .bind(expires_at)
+      .execute(self.pool)
+      .await?;
     Ok(())
   }
 
   pub async fn cleanup_expired(&self) -> Result<u64, sqlx::Error> {
     let now = Self::now_epoch();
-    let rows = sqlx::query(
-      "DELETE FROM auth.tokens_cache
-        WHERE expires_at < $1",
-    )
-    .bind(now)
-    .execute(self.pool)
-    .await?
-    .rows_affected();
-    let permissions_rows = sqlx::query(
-      "DELETE FROM auth.permissions_cache
-        WHERE expires_at < $1",
-    )
-    .bind(now)
-    .execute(self.pool)
-    .await?
-    .rows_affected();
-    Ok(rows + permissions_rows)
+    let rows = sqlx::query_scalar::<_, i64>("SELECT auth.sp_cache_cleanup_expired($1)")
+      .bind(now)
+      .fetch_one(self.pool)
+      .await?;
+    Ok(rows as u64)
   }
 
   fn has_expired(&self, expires_at: i64, now: i64) -> bool {

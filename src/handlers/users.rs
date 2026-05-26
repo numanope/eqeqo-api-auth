@@ -94,23 +94,11 @@ async fn ensure_business_user(
   business_id: i32,
   user_id: i32,
 ) -> Result<(), Response> {
-  match sqlx::query_scalar::<_, bool>(
-    "SELECT EXISTS (
-      SELECT 1
-      FROM auth.business_users bu
-      JOIN auth.businesses b ON b.id = bu.business_id
-      WHERE bu.business_id = $1
-        AND bu.person_id = $2
-        AND bu.status = TRUE
-        AND bu.removed_at IS NULL
-        AND b.status = TRUE
-        AND b.removed_at IS NULL
-    )",
-  )
-  .bind(business_id)
-  .bind(user_id)
-  .fetch_one(db.pool())
-  .await
+  match sqlx::query_scalar::<_, bool>("SELECT auth.sp_business_user_exists($1, $2)")
+    .bind(business_id)
+    .bind(user_id)
+    .fetch_one(db.pool())
+    .await
   {
     Ok(true) => Ok(()),
     Ok(false) => Err(error_response(
@@ -128,20 +116,10 @@ async fn list_user_businesses(
   db: &crate::database::DB,
   user_id: i32,
 ) -> Result<Vec<UserBusiness>, Response> {
-  match sqlx::query_as::<_, UserBusiness>(
-    "SELECT b.id, b.name, b.legal_name, b.document_type::text, b.document_number, b.status
-      FROM auth.businesses b
-      JOIN auth.business_users bu ON bu.business_id = b.id
-      WHERE bu.person_id = $1
-        AND bu.status = TRUE
-        AND bu.removed_at IS NULL
-        AND b.status = TRUE
-        AND b.removed_at IS NULL
-      ORDER BY b.name, b.id",
-  )
-  .bind(user_id)
-  .fetch_all(db.pool())
-  .await
+  match sqlx::query_as::<_, UserBusiness>("SELECT * FROM auth.sp_list_user_businesses($1)")
+    .bind(user_id)
+    .fetch_all(db.pool())
+    .await
   {
     Ok(businesses) => Ok(businesses),
     Err(_) => Err(error_response(
@@ -167,21 +145,12 @@ async fn load_user_app_settings(
   let business_id = resolve_business_id(db, context.business_id.as_ref()).await?;
   ensure_business_user(db, business_id, user_id).await?;
 
-  match sqlx::query_scalar::<_, String>(
-    "SELECT COALESCE(
-      (
-        SELECT settings::text
-        FROM auth.user_app_settings
-        WHERE business_id = $1 AND user_id = $2 AND app_id = $3
-      ),
-      '{}'::text
-    )",
-  )
-  .bind(business_id)
-  .bind(user_id)
-  .bind(&app_id)
-  .fetch_one(db.pool())
-  .await
+  match sqlx::query_scalar::<_, String>("SELECT auth.sp_user_app_settings($1, $2, $3)")
+    .bind(business_id)
+    .bind(user_id)
+    .bind(&app_id)
+    .fetch_one(db.pool())
+    .await
   {
     Ok(raw) => serde_json::from_str(&raw)
       .map(Some)
@@ -216,20 +185,15 @@ pub async fn login(req: &Request) -> Response {
     Err(response) => return response,
   };
 
-  let user = match sqlx::query_as::<_, AuthUser>(
-    "SELECT id, username, password_hash, name FROM auth.person WHERE username = $1 AND removed_at IS NULL",
-  )
-  .bind(&payload.username)
-  .fetch_optional(db.pool())
-  .await
+  let user = match sqlx::query_as::<_, AuthUser>("SELECT * FROM auth.sp_login_user($1)")
+    .bind(&payload.username)
+    .fetch_optional(db.pool())
+    .await
   {
     Ok(Some(user)) => user,
     Ok(None) => return unauthorized_response("invalid_credentials"),
     Err(_) => {
-      return error_response(
-        StatusCode::InternalServerError,
-        "login_lookup_failed",
-      );
+      return error_response(StatusCode::InternalServerError, "login_lookup_failed");
     }
   };
 
@@ -250,10 +214,7 @@ pub async fn login(req: &Request) -> Response {
       .unwrap_or_default()
       .as_secs() as i64;
     let existing_token = match sqlx::query_as::<_, (String, i64)>(
-      "SELECT token, expires_at FROM auth.tokens_cache
-        WHERE payload ->> 'user_id' = $1 AND expires_at > $2
-        ORDER BY expires_at DESC
-        LIMIT 1",
+      "SELECT * FROM auth.sp_latest_valid_user_token($1, $2)",
     )
     .bind(user.id.to_string())
     .bind(now)
@@ -493,9 +454,9 @@ pub async fn check_permission(req: &Request) -> Response {
       Some(service_id) => service_id,
       None => return unauthorized_response("invalid_service_token"),
     };
-    match sqlx::query_scalar::<_, bool>("SELECT status FROM auth.services WHERE id = $1")
+    match sqlx::query_scalar::<_, Option<bool>>("SELECT auth.sp_service_is_active($1)")
       .bind(service_id)
-      .fetch_optional(db.pool())
+      .fetch_one(db.pool())
       .await
     {
       Ok(Some(true)) => service_id,
@@ -513,9 +474,9 @@ pub async fn check_permission(req: &Request) -> Response {
       },
       None => return error_response(StatusCode::BadRequest, "invalid_service_id"),
     };
-    match sqlx::query_scalar::<_, bool>("SELECT status FROM auth.services WHERE id = $1")
+    match sqlx::query_scalar::<_, Option<bool>>("SELECT auth.sp_service_is_active($1)")
       .bind(service_id)
-      .fetch_optional(db.pool())
+      .fetch_one(db.pool())
       .await
     {
       Ok(Some(true)) => service_id,
