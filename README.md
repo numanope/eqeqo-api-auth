@@ -35,9 +35,18 @@ sudo bash deploy/deploy.sh
 
 ## Base de Datos
 
-- La logica SQL de negocio vive en `db/procedures.sql`.
-- El codigo Rust solo debe llamar funciones/procedimientos `auth.*`; no debe guardar consultas directas a tablas.
-- `auth.default_business_id()` usa `RUC 00000000001` como negocio demo; si no existe, usa el primer negocio activo para mantener compatibilidad con endpoints legacy.
+- PostgreSQL guarda usuarios, negocios, servicios, roles, permisos, sesiones, cache de permisos y settings.
+- `db/structure.sql` define tablas, tipos e indices.
+- `db/procedures.sql` contiene la logica SQL actual.
+- Rust solo llama funciones/procedimientos `auth.*`; no debe consultar tablas directamente.
+- `auth.default_business_id()` usa `RUC 00000000001` como negocio demo; si no existe, usa el primer negocio activo para endpoints legacy.
+
+Flujo interno:
+
+1. Handler valida token/header/body.
+2. Handler llama rutinas `auth.*` para leer o escribir datos.
+3. Si cambia acceso, se invalida cache de permisos.
+4. La respuesta HTTP se arma en Rust.
 
 ## Autorizacion
 
