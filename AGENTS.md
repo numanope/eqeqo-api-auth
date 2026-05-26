@@ -28,8 +28,15 @@
 - Bridges or frontends may verify hash locally when possible.
 
 # Testing Guidelines
+- For every new implementation, review whether tests are needed and add or update meaningful cases when behavior changes.
+- If tests are not added, state why in the final response.
+- Test important success paths, permission failures, validation failures, and persistence behavior when applicable.
 - Tests require a seeded DB from `db/run_all.sql`.
 - Use names like `login_behaves_as_expected` for consistency.
+
+# Documentation Guidelines
+- Update minimal docs for new or changed routes, schema, env vars, permissions, deploy steps, or user-facing flows.
+- Documentation must be complete enough for a new programmer or user to operate the change, without adding unnecessary explanation.
 
 # Deployment Preference
 - After finishing code changes for this service, deploy and restart `api-auth` without waiting for an extra request.
